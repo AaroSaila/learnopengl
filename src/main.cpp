@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <cstdio>
+#include <print>
 
 #include "glad/glad.h"
 #include <GLFW/glfw3.h>
@@ -18,7 +19,13 @@ void process_input(GLFWwindow* window) {
 }
 
 int main() {
-    assert(glfwInit() == GL_TRUE);
+    if (glfwInit() != GLFW_TRUE) {
+        const char* description;
+        const int err { glfwGetError(&description) };
+        std::println("glfwInit failed. Error code: {}. Description: {}", err, description);
+        return -1;
+    }
+
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 
@@ -31,7 +38,7 @@ int main() {
 
     glfwMakeContextCurrent(window);
 
-    if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::fprintf(stderr, "Failed to init GLAD\n");
         return -1;
     }
@@ -39,16 +46,28 @@ int main() {
     glViewport(0, 0, window_width, window_height);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
+    float vertices[] = {
+        -0.5f, -0.5f, 0.0f,
+        0.5f, -0.5f, 0.0f,
+        0.0f, 0.5f, 0.0f
+    };
+
+    unsigned int vbo;
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
     while (!glfwWindowShouldClose(window)) {
         process_input(window);
 
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-        
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
     glfwTerminate();
+
     return 0;
 }
