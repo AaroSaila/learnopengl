@@ -86,11 +86,23 @@ int main() {
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
 
-    float vertices[] {
-        0.5f, 0.5f, 0.0f,
-        0.5f, -0.5f, 0.0f,
-        -0.5f, -0.5f, 0.0f,
-        -0.5f, 0.5f, 0.0f
+    float left_right_x { -0.1f };
+    float left_left_x { -1.0f };
+    float left_top_x { -((-left_left_x - -left_right_x) / 2 + -left_right_x) };
+
+    float right_left_x { 0.1f };
+    float right_right_x { 1.0f };
+    float right_top_x { (right_right_x - right_left_x) / 2 + right_left_x };
+
+    float vertices[] = {
+        // Left triangle
+        left_right_x, -0.5f, 0.0f,
+        left_left_x, -0.5f, 0.0f,
+        left_top_x, 0.5f, 0.0f,
+        // Right triangle
+        right_left_x, -0.5f, 0.0f,
+        right_right_x, -0.5f, 0.0f,
+        right_top_x, 0.5f, 0.0f,
     };
 
     unsigned int vbo;
@@ -98,17 +110,8 @@ int main() {
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-    // EBO
-    unsigned int indices[] {
-        0, 1, 3,
-        1, 2, 3
-    };
-
-    unsigned int ebo;
-    glGenBuffers(1, &ebo);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
 
     // Vertex shader
     unsigned int vertex_shader { glCreateShader(GL_VERTEX_SHADER) };
@@ -120,9 +123,6 @@ int main() {
     glShaderSource(vertex_shader, 1, &vertex_shader_source, nullptr);
     glCompileShader(vertex_shader);
     check_shader_compile_error(vertex_shader);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), static_cast<void*>(0));
-    glEnableVertexAttribArray(0);
 
     // Fragment shader
     unsigned int fragment_shader { glCreateShader(GL_FRAGMENT_SHADER) };
@@ -141,7 +141,7 @@ int main() {
         std::fprintf(stderr, "Failed to create shader program.\n");
         exit_after_glfw_init(-1);
     }
-    
+
     glAttachShader(shader_program, vertex_shader);
     glAttachShader(shader_program, fragment_shader);
     glLinkProgram(shader_program);
@@ -169,11 +169,8 @@ int main() {
 
         glUseProgram(shader_program);
 
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
         glBindVertexArray(vao);
-        glDrawElements(GL_TRIANGLES, sizeof(indices) / sizeof(indices[0]), GL_UNSIGNED_INT, 0);
-        glBindVertexArray(0);
+        glDrawArrays(GL_TRIANGLES, 0, sizeof(vertices) / sizeof(vertices[0]));
 
         glfwSwapBuffers(window);
         glfwPollEvents();
