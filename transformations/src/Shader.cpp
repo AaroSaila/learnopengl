@@ -1,13 +1,15 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <print>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include "glad/glad.h"
 
 #include "Shader.h"
-#include "quit.h"
 #include "error_handling.h"
+#include "quit.h"
 
 Shader::Shader(const char* vertex_path, const char* fragment_path) {
     std::string vertex_code;
@@ -85,19 +87,33 @@ void Shader::use() const {
     glUseProgram(this->_id);
 }
 
-void Shader::setBool(const std::string &name, const bool value) const {
+void Shader::setBool(const std::string& name, const bool value) const {
     glUniform1i(glGetUniformLocation(this->_id, name.c_str()), static_cast<int>(value));
 }
 
-void Shader::setInt(const std::string &name, const int value) const {
-    glUniform1i(glGetUniformLocation(this->_id, name.c_str()), value);
+void Shader::setInt(const std::string& name, const int value) const {
+    const int uniform { glGetUniformLocation(this->_id, name.c_str()) };
+    if (uniform == -1) {
+        log_error(std::format("Could not find uniform '{}'", name).c_str());
+        quit(1);
+    }
+    glUniform1i(uniform, value);
 }
 
-void Shader::setFloat(const std::string &name, const float value) const {
+void Shader::setFloat(const std::string& name, const float value) const {
     const int uniform { glGetUniformLocation(this->_id, name.c_str()) };
     if (uniform == -1) {
         log_error(std::format("Could not find uniform '{}'", name).c_str());
         quit(1);
     }
     glUniform1f(uniform, value);
+}
+
+void Shader::setMat4(const std::string& name, const glm::mat4& value) {
+    const int uniform { glGetUniformLocation(this->_id, name.c_str()) };
+    if (uniform == -1) {
+        log_error(std::format("Could not find uniform '{}'", name).c_str());
+        quit(1);
+    }
+    glUniformMatrix4fv(uniform, 1, GL_FALSE, glm::value_ptr(value));
 }

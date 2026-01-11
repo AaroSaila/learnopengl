@@ -11,7 +11,10 @@ project(
 
 cpp_args = [
   '-std=c++23',
+  '-Og',
   '-ggdb',
+  '-Wall',
+  '-Wextra'
 ]
 
 includes = [
@@ -27,7 +30,7 @@ dependencies = [
 ]
 
 executable(
-  'textures',
+  'transformations',
   'src/main.cpp',
   'src/Shader.cpp',
   'src/quit.cpp',
@@ -48,7 +51,7 @@ executable(
 
 executable(
   'ex1',
-  'src/main.cpp',
+  'exercises/ex1/main.cpp',
   'src/Shader.cpp',
   'src/quit.cpp',
   'src/error_handling.cpp',
@@ -58,7 +61,7 @@ executable(
   cpp_args : [
     cpp_args,
     '-DVERTEX_SHADER_PATH="../shaders/shader.vs"',
-    '-DFRAGMENT_SHADER_PATH="../shaders/ex1/shader.fs"',
+    '-DFRAGMENT_SHADER_PATH="../shaders/shader.fs"',
   ],
   include_directories : includes
 )
@@ -76,40 +79,6 @@ executable(
     cpp_args,
     '-DVERTEX_SHADER_PATH="../shaders/shader.vs"',
     '-DFRAGMENT_SHADER_PATH="../shaders/shader.fs"',
-  ],
-  include_directories : includes
-)
-
-executable(
-  'ex3',
-  'exercises/ex3/main.cpp',
-  'src/Shader.cpp',
-  'src/quit.cpp',
-  'src/error_handling.cpp',
-  '../common/glad.c',
-  dependencies : dependencies,
-  native : true,
-  cpp_args : [
-    cpp_args,
-    '-DVERTEX_SHADER_PATH="../shaders/shader.vs"',
-    '-DFRAGMENT_SHADER_PATH="../shaders/shader.fs"',
-  ],
-  include_directories : includes
-)
-
-executable(
-  'ex4',
-  'exercises/ex4/main.cpp',
-  'src/Shader.cpp',
-  'src/quit.cpp',
-  'src/error_handling.cpp',
-  '../common/glad.c',
-  dependencies : dependencies,
-  native : true,
-  cpp_args : [
-    cpp_args,
-    '-DVERTEX_SHADER_PATH="../shaders/shader.vs"',
-    '-DFRAGMENT_SHADER_PATH="../shaders/ex4/shader.fs"',
   ],
   include_directories : includes
 )
