@@ -9,6 +9,5 @@ uniform mat4 transform;
 
 void main() {
    gl_Position = transform * vec4(a_pos, 1.0f);
-   // gl_Position = vec4(a_pos, 1.0f);
    tex_coord = a_tex_coord;
 }
