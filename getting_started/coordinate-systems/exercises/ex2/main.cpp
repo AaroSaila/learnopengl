@@ -31,7 +31,7 @@ static const std::filesystem::path fragment_shader_path {
 };
 
 static const std::filesystem::path textures_path {
-    std::filesystem::canonical("../../common/textures/")
+    std::filesystem::canonical(TEXTURES_PATH)
 };
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -267,7 +267,6 @@ int main() {
         } else if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS) {
             view.y = init_view.y;
         }
-
 
         if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
             view.z += 0.1f;

@@ -31,7 +31,7 @@ static const std::filesystem::path fragment_shader_path {
 };
 
 static const std::filesystem::path textures_path {
-    std::filesystem::canonical("../../common/textures/")
+    std::filesystem::canonical(TEXTURES_PATH)
 };
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -215,20 +215,6 @@ int main() {
     view = glm::translate(view, glm::vec3 { 0.0f, 0.0f, -3.0f });
     shader.setMat4("view", view);
 
-    constexpr const float fov { glm::radians(45.0f) };
-    constexpr const float aspect_ratio { static_cast<float>(window_width) / window_height };
-    constexpr const float near_plane { 0.1f };
-    constexpr const float far_plane { 100.0f };
-    const glm::mat4 projection {
-        glm::perspective(
-            fov,
-            aspect_ratio,
-            near_plane,
-            far_plane)
-    };
-    // glm::mat4 projection { 1.0f };
-    shader.setMat4("projection", projection);
-
     constexpr const std::array cube_positions {
         glm::vec3(0.0f, 0.0f, 0.0f),
         glm::vec3(2.0f, 5.0f, -15.0f),
@@ -243,6 +229,10 @@ int main() {
     };
 
     // Render loop
+    constexpr const float init_fov { 45.0f };
+    constexpr const float init_aspect_ratio { static_cast<float>(window_width) / window_height };
+    float fov { init_fov };
+    float aspect_ratio { init_aspect_ratio };
     while (!glfwWindowShouldClose(window)) {
         process_input(window);
 
@@ -254,17 +244,45 @@ int main() {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, texture2);
 
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+            aspect_ratio += 0.05f;
+        } else if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+            aspect_ratio -= 0.05f;
+        } else if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) {
+            aspect_ratio = init_aspect_ratio;
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+            fov += 1.0f;
+        } else if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+            fov -= 1.0f;
+        } else if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS) {
+            fov = init_fov;
+        }
+
+        std::println("------------------------------------------");
+        std::println("aspect_ratio: {}", aspect_ratio);
+        std::println("fov         : {}", fov);
+        std::println("------------------------------------------");
+
+        constexpr const float near_plane { 0.1f };
+        constexpr const float far_plane { 100.0f };
+        const glm::mat4 projection {
+            glm::perspective(
+                glm::radians(fov),
+                aspect_ratio,
+                near_plane,
+                far_plane)
+        };
+        // glm::mat4 projection { 1.0f };
+        shader.setMat4("projection", projection);
+
         glBindVertexArray(vao);
         for (std::size_t i { 0 }; i < cube_positions.size(); i++) {
             glm::mat4 model { 1.0f };
             model = glm::translate(model, cube_positions[i]);
-            float angle {};
-            if (i % 3 == 0) {
-                angle = static_cast<float>(glfwGetTime()) * 20.0f;
-            } else {
-                angle = 20.0f * i;
-            }
-            model = glm::rotate(model, glm::radians(angle), glm::vec3 { 1.0f, 0.3f, 0.5f });
+            const float angle { glm::radians(20.0f * i) };
+            model = glm::rotate(model, angle, glm::vec3 { 1.0f, 0.3f, 0.5f });
             shader.setMat4("model", model);
             glDrawArrays(GL_TRIANGLES, 0, vertices.size());
         }

@@ -1,5 +1,5 @@
 project(
-  'learnopengl_textures',
+  'camera',
   'cpp',
   'c',
   version : '0.1',
@@ -14,12 +14,13 @@ cpp_args = [
   '-Og',
   '-ggdb',
   '-Wall',
-  '-Wextra'
+  '-Wextra',
+  '-DTEXTURES_PATH="../../../common/textures"'
 ]
 
 includes = [
   include_directories(
-    '../common/headers/',
+    '../../common/headers/',
     'src/headers/'
     )
 ]
@@ -30,12 +31,13 @@ dependencies = [
 ]
 
 executable(
-  'coordsys',
+  'camera',
   'src/main.cpp',
+  'src/Camera.cpp',
   'src/Shader.cpp',
   'src/quit.cpp',
   'src/error_handling.cpp',
-  '../common/glad.c',
+  '../../common/glad.c',
   dependencies : dependencies,
   native : true,
   cpp_args : [
@@ -51,11 +53,12 @@ executable(
 
 executable(
   'ex1',
-  'exercises/ex1/main.cpp',
+  'src/main.cpp',
+  'exercises/ex1/Camera.cpp',
   'src/Shader.cpp',
   'src/quit.cpp',
   'src/error_handling.cpp',
-  '../common/glad.c',
+  '../../common/glad.c',
   dependencies : dependencies,
   native : true,
   cpp_args : [
@@ -68,28 +71,12 @@ executable(
 
 executable(
   'ex2',
-  'exercises/ex2/main.cpp',
+  'src/main.cpp',
+  'exercises/ex2/Camera.cpp',
   'src/Shader.cpp',
   'src/quit.cpp',
   'src/error_handling.cpp',
-  '../common/glad.c',
-  dependencies : dependencies,
-  native : true,
-  cpp_args : [
-    cpp_args,
-    '-DVERTEX_SHADER_PATH="../shaders/shader.vert"',
-    '-DFRAGMENT_SHADER_PATH="../shaders/shader.frag"',
-  ],
-  include_directories : includes
-)
-
-executable(
-  'ex3',
-  'exercises/ex3/main.cpp',
-  'src/Shader.cpp',
-  'src/quit.cpp',
-  'src/error_handling.cpp',
-  '../common/glad.c',
+  '../../common/glad.c',
   dependencies : dependencies,
   native : true,
   cpp_args : [

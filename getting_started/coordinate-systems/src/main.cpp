@@ -31,7 +31,7 @@ static const std::filesystem::path fragment_shader_path {
 };
 
 static const std::filesystem::path textures_path {
-    std::filesystem::canonical("../../common/textures/")
+    std::filesystem::canonical(TEXTURES_PATH)
 };
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -91,6 +91,7 @@ int main() {
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfwWindowHint(GLFW_FLOATING, GLFW_TRUE);
 
     GLFWwindow* window = glfwCreateWindow(window_width, window_height, "LearnOpenGL", nullptr, nullptr);
     if (window == nullptr) {
