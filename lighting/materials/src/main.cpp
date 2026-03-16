@@ -310,9 +310,9 @@ int main() {
         shader.set_vec3("view_pos", camera.get_pos());
 
         glm::vec3 light_color {};
-        light_color.x = std::sin(2.0f * current_time);
-        light_color.y = std::sin(0.7f * current_time);
-        light_color.z = std::sin(1.3f * current_time);
+        light_color.r = std::sin(2.0f * current_time);
+        light_color.g = std::sin(0.7f * current_time);
+        light_color.b = std::sin(1.3f * current_time);
         glm::vec3 diffuse_color { light_color * 0.5f };
         glm::vec3 ambient_color { light_color * 0.2f };
         shader.set_vec3("light.diffuse", diffuse_color);
@@ -320,7 +320,6 @@ int main() {
 
         glBindVertexArray(cube_vao);
         glDrawArrays(GL_TRIANGLES, 0, cube_vertices.size());
-
 
         // Light source
         light_source_shader.use();
