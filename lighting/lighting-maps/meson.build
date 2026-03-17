@@ -65,3 +65,53 @@ executable(
   ],
   include_directories : includes
 )
+
+executable(
+  'ex2',
+  'src/main.cpp',
+  'src/Camera.cpp',
+  'src/Shader.cpp',
+  'src/quit.cpp',
+  'src/error_handling.cpp',
+  '../../common/glad.c',
+  dependencies : dependencies,
+  native : true,
+  cpp_args : [
+    cpp_args,
+    '-DSHADERS_PATH="../exercises/ex2"'
+  ],
+  include_directories : includes
+)
+
+executable(
+  'ex3',
+  'exercises/ex3/main.cpp',
+  'src/Camera.cpp',
+  'src/Shader.cpp',
+  'src/quit.cpp',
+  'src/error_handling.cpp',
+  '../../common/glad.c',
+  dependencies : dependencies,
+  native : true,
+  cpp_args : [
+    cpp_args,
+  ],
+  include_directories : includes
+)
+
+executable(
+  'ex4',
+  'exercises/ex4/main.cpp',
+  'src/Camera.cpp',
+  'src/Shader.cpp',
+  'src/quit.cpp',
+  'src/error_handling.cpp',
+  '../../common/glad.c',
+  dependencies : dependencies,
+  native : true,
+  cpp_args : [
+    cpp_args,
+    '-DSHADERS_PATH="../exercises/ex4/shaders"'
+  ],
+  include_directories : includes
+)
