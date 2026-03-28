@@ -17,13 +17,13 @@ cpp_args = [
 ]
 
 includes = [
-  include_directories('../common/headers')
+  include_directories('../../common/headers')
 ]
 
 executable(
   'triangle',
   'src/triangle.cpp',
-  '../common/glad.c',
+  '../../common/glad.c',
   dependencies : dependencies,
   native : true,
   cpp_args : cpp_args,
@@ -33,7 +33,7 @@ executable(
 executable(
   'rectangle',
   'src/rectangle.cpp',
-  '../common/glad.c',
+  '../../common/glad.c',
   dependencies : dependencies,
   native : true,
   cpp_args : cpp_args,
@@ -45,7 +45,7 @@ executable(
 executable(
   'ex1',
   'exercises/ex1/ex1.cpp',
-  '../common/glad.c',
+  '../../common/glad.c',
   dependencies : dependencies,
   cpp_args : cpp_args,
   include_directories : includes
@@ -54,7 +54,7 @@ executable(
 executable(
   'ex2',
   'exercises/ex2/ex2.cpp',
-  '../common/glad.c',
+  '../../common/glad.c',
   dependencies : dependencies,
   cpp_args : cpp_args,
   include_directories : includes
@@ -63,7 +63,7 @@ executable(
 executable(
   'ex3',
   'exercises/ex3/ex3.cpp',
-  '../common/glad.c',
+  '../../common/glad.c',
   dependencies : dependencies,
   cpp_args : cpp_args,
   include_directories : includes
