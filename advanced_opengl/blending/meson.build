@@ -1,5 +1,5 @@
 project(
-  'stencil-testing',
+  'blending',
   'cpp',
   'c',
   version : '0.1',
@@ -34,7 +34,7 @@ dependencies = [
 ]
 
 executable(
-  'stencil-testing',
+  'blending',
   'src/main.cpp',
   'src/Camera.cpp',
   'src/Mesh.cpp',

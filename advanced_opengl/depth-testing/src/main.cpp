@@ -134,6 +134,52 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     }
 }
 
+unsigned int make_vao(
+        const float* vertices,
+        const std::size_t vertices_size,
+        const unsigned int* indices,
+        const std::size_t indices_size
+        ) {
+
+    unsigned int vao { };
+    glGenVertexArrays(1, &vao);
+
+    unsigned int vbo { };
+    glGenBuffers(1, &vbo);
+
+    unsigned int ebo { };
+    glGenBuffers(1, &ebo);
+
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        vertices_size,
+        vertices,
+        GL_STATIC_DRAW);
+
+    glBufferData(
+        GL_ELEMENT_ARRAY_BUFFER,
+        indices_size,
+        indices,
+        GL_STATIC_DRAW);
+
+    glVertexAttribPointer(
+        0,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+        3 * sizeof(float),
+        0);
+    glEnableVertexAttribArray(0);
+
+    glBindVertexArray(0);
+
+    return vao;
+}
+
 int main(const int argc, const char** argv) {
     (void) argc;
 
@@ -185,20 +231,91 @@ int main(const int argc, const char** argv) {
 
     glEnable(GL_DEPTH_TEST);
 
+    // Square
+    // clang-format off
+    constexpr std::array<float, 12> square_vertices {
+        -1.0f, 1.0f, 0.0f, // top left
+        1.0f, 1.0f, 0.0f,  // top right
+        1.0f, -1.0f, 0.0f, // bottom right
+        -1.0f, -1.0f, 0.0f // bottom left
+    };
+    // clang-format on
+
+    // clang-format off
+    constexpr std::array<unsigned int, 6> square_indices {
+        0, 1, 2,
+        2, 3, 0
+    };
+    // clang-format on
+
+    const unsigned int square_vao { make_vao(
+            square_vertices.data(),
+            square_vertices.size() * sizeof(float),
+            square_indices.data(),
+            square_indices.size() * sizeof(unsigned int)
+            ) };
+
+    // Cube
+    // clang-format off
+    constexpr std::array cube_vertices {
+        -1.0f, 1.0f, 1.0f, // front top left
+        1.0f, 1.0f, 1.0f,  // front top right
+        1.0f, -1.0f, 1.0f, // front bottom right
+        -1.0f, -1.0f, 1.0f, // front bottom left
+
+        -1.0f, 1.0f, -1.0f, // back top left
+        1.0f, 1.0f, -1.0f,  // back top right
+        1.0f, -1.0f, -1.0f, // back bottom right
+        -1.0f, -1.0f, -1.0f // back bottom left
+    };
+    // clang-format on
+
+    // clang-format off
+    constexpr std::array<unsigned int, 36> cube_indices {
+        // front face
+        0, 1, 2,
+        2, 3, 0,
+
+        // back face
+        4, 5, 6,
+        6, 7, 4,
+
+        // left face
+        0, 4, 7,
+        7, 3, 0,
+
+        // right face
+        1, 5, 6,
+        6, 2, 1,
+
+        // top face
+        0, 4, 5,
+        5, 1, 0,
+
+        // bottom face
+        3, 7, 6,
+        6, 2, 3
+    };
+    // clang-format on
+
+    const unsigned int cube_vao { make_vao(
+            cube_vertices.data(),
+            cube_vertices.size() * sizeof(float),
+            cube_indices.data(),
+            cube_indices.size() * sizeof(unsigned int)
+            ) };
+
     // Shaders
     Shader shader {
         shaders_path / "shader.vert",
         shaders_path / "shader.frag"
     };
 
-    const unsigned int plane_vao { Primitives::Square::make_vao() };
     glm::vec3 plane_color { glm::normalize(glm::vec3 { 13.0f, 68.0f, 9.0f }) };
     glm::mat4 plane_model { 1.0f };
     plane_model = glm::translate(plane_model, glm::vec3 { 0.0f, 0.0f, 0.0f });
     plane_model = glm::rotate(plane_model, glm::radians(90.0f), glm::vec3 { 1.0f, 0.0f, 0.0f });
     plane_model = glm::scale(plane_model, glm::vec3 { 100.0f });
-    
-    const unsigned int cube_vao { Primitives::Cube::make_vao() };
 
     glm::vec3 cube1_color { 0.0f }; 
     glm::mat4 cube1_model { 1.0f };
@@ -238,7 +355,7 @@ int main(const int argc, const char** argv) {
 
         shader.set_mat4("model", plane_model);
         shader.set_vec3("color", plane_color);
-        glBindVertexArray(plane_vao);
+        glBindVertexArray(square_vao);
         glDrawElements(GL_TRIANGLES, Primitives::Square::indices.size(), GL_UNSIGNED_INT, 0);
 
         shader.set_mat4("model", cube1_model);

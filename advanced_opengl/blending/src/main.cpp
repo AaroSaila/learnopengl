@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <string_view>
+#include <map>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -18,9 +19,9 @@
 
 #include "Camera.hpp"
 #include "Shader.hpp"
+#include "error_handling.hpp"
 #include "quit.hpp"
 #include "trace.hpp"
-#include "primitives.hpp"
 
 static int window_width { 800 };
 static int window_height { 600 };
@@ -55,6 +56,7 @@ static struct {
 static float delta_time { 0.0f };
 static float last_frame { 0.0f };
 static bool cursor_mouse_enabled { true };
+static bool first_mouse_input { true };
 
 std::filesystem::path textures_path { };
 std::filesystem::path shaders_path { };
@@ -69,8 +71,6 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     (void) window;
-
-    static bool first_mouse_input { true };
 
     if (cursor_mouse_enabled) {
         if (first_mouse_input) {
@@ -129,15 +129,68 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         };
         glfwSetInputMode(window, GLFW_CURSOR, cursor_mode);
         cursor_mouse_enabled = !cursor_mouse_enabled;
+        first_mouse_input = true;
     }
 }
 
+unsigned int texture_load(const std::filesystem::path& path, const int wrap_method = GL_REPEAT) {
+    if (!std::filesystem::exists(path)) {
+        log_error(std::format("The given image file '{}' does not exist.",
+            path.c_str())
+                .c_str());
+        quit(1);
+    }
+
+    int img_w { };
+    int img_h { };
+    int img_nr_channels { };
+    unsigned char* img_data {
+        stbi_load(path.c_str(), &img_w, &img_h, &img_nr_channels, 0)
+    };
+    if (img_data == nullptr) {
+        log_error("Failed to load image.");
+        quit(1);
+    }
+
+    GLenum format { };
+    switch (img_nr_channels) {
+    case 1:
+        format = GL_RED;
+        break;
+    case 3:
+        format = GL_RGB;
+        break;
+    case 4:
+        format = GL_RGBA;
+        break;
+    default:
+        log_error(std::format("Unhandled amount of channels: {}", img_nr_channels).c_str());
+    }
+
+    unsigned int texture { };
+    glGenTextures(1, &texture);
+
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, format, img_w, img_h, 0, format,
+        GL_UNSIGNED_BYTE, img_data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap_method);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap_method);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    stbi_image_free(img_data);
+    img_data = nullptr;
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    return texture;
+}
+
 unsigned int make_vao(
-        const float* vertices,
-        const std::size_t vertices_size,
-        const unsigned int* indices,
-        const std::size_t indices_size
-        ) {
+    const float* vertices,
+    const std::size_t vertices_size) {
 
     unsigned int vao { };
     glGenVertexArrays(1, &vao);
@@ -145,12 +198,8 @@ unsigned int make_vao(
     unsigned int vbo { };
     glGenBuffers(1, &vbo);
 
-    unsigned int ebo { };
-    glGenBuffers(1, &ebo);
-
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
 
     glBufferData(
         GL_ARRAY_BUFFER,
@@ -158,20 +207,26 @@ unsigned int make_vao(
         vertices,
         GL_STATIC_DRAW);
 
-    glBufferData(
-        GL_ELEMENT_ARRAY_BUFFER,
-        indices_size,
-        indices,
-        GL_STATIC_DRAW);
-
+    const std::size_t stride { sizeof(float) * 5 };
+    // Positions
     glVertexAttribPointer(
         0,
         3,
         GL_FLOAT,
         GL_FALSE,
-        3 * sizeof(float),
+        stride,
         0);
     glEnableVertexAttribArray(0);
+
+    // Tex coords
+    glVertexAttribPointer(
+        1,
+        2,
+        GL_FLOAT,
+        GL_FALSE,
+        stride,
+        (void*) (sizeof(float) * 3));
+    glEnableVertexAttribArray(1);
 
     glBindVertexArray(0);
 
@@ -203,7 +258,7 @@ int main(const int argc, const char** argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    stbi_set_flip_vertically_on_load(true);
+    // stbi_set_flip_vertically_on_load(true);
 
     GLFWwindow* window = glfwCreateWindow(window_width, window_height,
         "LearnOpenGL", nullptr, nullptr);
@@ -229,104 +284,138 @@ int main(const int argc, const char** argv) {
 
     glEnable(GL_STENCIL_TEST);
 
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
     // Square
     // clang-format off
-    constexpr std::array<float, 12> square_vertices {
-        -1.0f, 1.0f, 0.0f, // top left
-        1.0f, 1.0f, 0.0f,  // top right
-        1.0f, -1.0f, 0.0f, // bottom right
-        -1.0f, -1.0f, 0.0f // bottom left
+    constexpr std::array plane_vertices {
+    //   positions            texture Coords 
+         5.0f, -0.5f,  5.0f,  2.0f, 0.0f,
+        -5.0f, -0.5f,  5.0f,  0.0f, 0.0f,
+        -5.0f, -0.5f, -5.0f,  0.0f, 2.0f,
+
+         5.0f, -0.5f,  5.0f,  2.0f, 0.0f,
+        -5.0f, -0.5f, -5.0f,  0.0f, 2.0f,
+         5.0f, -0.5f, -5.0f,  2.0f, 2.0f
     };
     // clang-format on
 
-    // clang-format off
-    constexpr std::array<unsigned int, 6> square_indices {
-        0, 1, 2,
-        2, 3, 0
-    };
-    // clang-format on
-
-    const unsigned int square_vao { make_vao(
-            square_vertices.data(),
-            square_vertices.size() * sizeof(float),
-            square_indices.data(),
-            square_indices.size() * sizeof(unsigned int)
-            ) };
+    const unsigned int plane_vao { make_vao(
+        plane_vertices.data(),
+        plane_vertices.size() * sizeof(float)) };
 
     // Cube
     // clang-format off
     constexpr std::array cube_vertices {
-        -1.0f, 1.0f, 1.0f, // front top left
-        1.0f, 1.0f, 1.0f,  // front top right
-        1.0f, -1.0f, 1.0f, // front bottom right
-        -1.0f, -1.0f, 1.0f, // front bottom left
+    //  positions             texture Coords
+        -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+         0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
 
-        -1.0f, 1.0f, -1.0f, // back top left
-        1.0f, 1.0f, -1.0f,  // back top right
-        1.0f, -1.0f, -1.0f, // back bottom right
-        -1.0f, -1.0f, -1.0f // back bottom left
-    };
-    // clang-format on
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
 
-    // clang-format off
-    constexpr std::array<unsigned int, 36> cube_indices {
-        // front face
-        0, 1, 2,
-        2, 3, 0,
+        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
 
-        // back face
-        4, 5, 6,
-        6, 7, 4,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+         0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+         0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
 
-        // left face
-        0, 4, 7,
-        7, 3, 0,
+        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+         0.5f, -0.5f, -0.5f,  1.0f, 1.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
 
-        // right face
-        1, 5, 6,
-        6, 2, 1,
-
-        // top face
-        0, 4, 5,
-        5, 1, 0,
-
-        // bottom face
-        3, 7, 6,
-        6, 2, 3
+        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f
     };
     // clang-format on
 
     const unsigned int cube_vao { make_vao(
-            cube_vertices.data(),
-            cube_vertices.size() * sizeof(float),
-            cube_indices.data(),
-            cube_indices.size() * sizeof(unsigned int)
-            ) };
+        cube_vertices.data(),
+        cube_vertices.size() * sizeof(float)) };
+
+    // Quad
+    // clang-format off
+    constexpr std::array quad_vertices {
+    //  positions     texture Coords (swapped y coordinates because texture is flipped upside down)
+        0.0f,  0.5f,  0.0f,  0.0f,  0.0f,
+        0.0f, -0.5f,  0.0f,  0.0f,  1.0f,
+        1.0f, -0.5f,  0.0f,  1.0f,  1.0f,
+
+        0.0f,  0.5f,  0.0f,  0.0f,  0.0f,
+        1.0f, -0.5f,  0.0f,  1.0f,  1.0f,
+        1.0f,  0.5f,  0.0f,  1.0f,  0.0f
+    };
+    // clang-format on
+
+    const unsigned int quad_vao { make_vao(
+        quad_vertices.data(),
+        quad_vertices.size() * sizeof(float)) };
 
     // Shaders
     Shader shader {
-        shaders_path / "position_only.vert",
-        shaders_path / "color_only.frag"
+        shaders_path / "shader.vert",
+        shaders_path / "shader.frag"
     };
 
-    glm::vec3 plane_color { glm::normalize(glm::vec3 { 13.0f, 68.0f, 9.0f }) };
+    // Textures
+    const unsigned int texture_marble { texture_load(textures_path / "marble.jpg") };
+    const unsigned int texture_metal { texture_load(textures_path / "metal.png") };
+    const unsigned int texture_grass { texture_load(textures_path / "blending_transparent_window.png", GL_CLAMP_TO_EDGE) };
+
+    const unsigned int texture_marble_i { 0 };
+    glActiveTexture(GL_TEXTURE0 + texture_marble_i);
+    glBindTexture(GL_TEXTURE_2D, texture_marble);
+
+    const unsigned int texture_metal_i { 1 };
+    glActiveTexture(GL_TEXTURE0 + texture_metal_i);
+    glBindTexture(GL_TEXTURE_2D, texture_metal);
+
+    const unsigned int texture_grass_i { 2 };
+    glActiveTexture(GL_TEXTURE0 + texture_grass_i);
+    glBindTexture(GL_TEXTURE_2D, texture_grass);
+
     glm::mat4 plane_model { 1.0f };
     plane_model = glm::translate(plane_model, glm::vec3 { 0.0f, 0.0f, 0.0f });
-    plane_model = glm::rotate(plane_model, glm::radians(90.0f), glm::vec3 { 1.0f, 0.0f, 0.0f });
-    plane_model = glm::scale(plane_model, glm::vec3 { 100.0f });
 
-    glm::vec3 cube1_color { 0.0f }; 
     glm::mat4 cube1_model { 1.0f };
-    cube1_model = glm::translate(cube1_model, glm::vec3 { 0.0f, 1.0f, 0.0f });
+    cube1_model = glm::translate(cube1_model, glm::vec3 { -1.0f, 0.0f, -1.0f });
 
-    glm::vec3 cube2_color { 1.0f }; 
     glm::mat4 cube2_model { 1.0f };
-    cube2_model = glm::translate(cube2_model, glm::vec3 { 0.0f, 1.0f, -8.0f });
+    cube2_model = glm::translate(cube2_model, glm::vec3 { 2.0f, 0.0f, 0.0f });
 
-    const glm::vec3 sky_color { glm::normalize(glm::vec3 { 53.0f, 132.0f, 228.0f }) };
-    const glm::vec3 outline_color { 1.0f, 0.0f, 0.0f };
+    // const glm::vec3 sky_color { glm::normalize(glm::vec3 { 53.0f, 132.0f, 228.0f }) };
 
-    const glm::vec3 outline_scale { 1.05f };
+    const std::vector<glm::vec3> window_positions {
+        { -1.5f, 0.0f, -0.48f },
+        { 1.5f, 0.0f, 0.51f },
+        { 0.0f, 0.0f, 0.7f },
+        { -0.3f, 0.0f, -2.3f },
+        { 0.5f, 0.0f, -0.6f }
+    };
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -336,7 +425,8 @@ int main(const int argc, const char** argv) {
 
         process_input(window);
 
-        glClearColor(sky_color.r, sky_color.g, sky_color.b, 1.0f);
+        // glClearColor(sky_color.r, sky_color.g, sky_color.b, 1.0f);
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
         glEnable(GL_DEPTH_TEST);
@@ -357,42 +447,38 @@ int main(const int argc, const char** argv) {
         shader.set_mat4("projection", projection);
 
         // Ground
-        glStencilMask(0x00);
+        shader.set_int("texture_map", texture_metal_i);
         shader.set_mat4("model", plane_model);
-        shader.set_vec3("color", plane_color);
-        glBindVertexArray(square_vao);
-        glDrawElements(GL_TRIANGLES, Primitives::Square::indices.size(), GL_UNSIGNED_INT, 0);
+        glBindVertexArray(plane_vao);
+        glDrawArrays(GL_TRIANGLES, 0, plane_vertices.size());
 
         // Cubes
 
-        glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-        glStencilFunc(GL_ALWAYS, 1, 0xFF);
-        glStencilMask(0xFF);
+        shader.set_int("texture_map", texture_marble_i);
 
         shader.set_mat4("model", cube1_model);
-        shader.set_vec3("color", cube1_color);
         glBindVertexArray(cube_vao);
-        glDrawElements(GL_TRIANGLES, Primitives::Cube::indices.size(), GL_UNSIGNED_INT, 0);
+        glDrawArrays(GL_TRIANGLES, 0, cube_vertices.size());
 
         shader.set_mat4("model", cube2_model);
-        shader.set_vec3("color", cube2_color);
-        glDrawElements(GL_TRIANGLES, Primitives::Cube::indices.size(), GL_UNSIGNED_INT, 0);
+        glDrawArrays(GL_TRIANGLES, 0, cube_vertices.size());
 
-        // outlines
-        glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
-        glStencilMask(0x00);
-        glDisable(GL_DEPTH_TEST);
+        // Windows
+        shader.set_int("texture_map", texture_grass_i);
+        glBindVertexArray(quad_vao);
 
-        shader.set_vec3("color", outline_color);
-        shader.set_mat4("model", glm::scale(cube1_model, outline_scale));
-        glDrawElements(GL_TRIANGLES, Primitives::Cube::indices.size(), GL_UNSIGNED_INT, 0);
+        std::map<float, glm::vec3> windows_sorted {};
 
-        shader.set_mat4("model", glm::scale(cube2_model, outline_scale));
-        glDrawElements(GL_TRIANGLES, Primitives::Cube::indices.size(), GL_UNSIGNED_INT, 0);
-
-        glStencilMask(0xFF);
-        glStencilFunc(GL_ALWAYS, 1, 0xFF);
-        glEnable(GL_DEPTH_TEST);
+        for (const auto& pos : window_positions) {
+            const float distance { glm::length(camera.get_pos() - pos) };
+            windows_sorted[distance] = pos;
+        }
+        for (auto it { windows_sorted.rbegin() }; it != windows_sorted.rend(); it++) {
+            glm::mat4 grass_model { 1.0f };
+            grass_model = glm::translate(grass_model, it->second);
+            shader.set_mat4("model", grass_model);
+            glDrawArrays(GL_TRIANGLES, 0, quad_vertices.size());
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();

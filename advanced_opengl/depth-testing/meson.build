@@ -44,7 +44,6 @@ executable(
   'src/error_handling.cpp',
   'src/trace.cpp',
   '../../common/glad.c',
-  '../../common/primitives.cpp',
   dependencies : dependencies,
   native : true,
   cpp_args : [
