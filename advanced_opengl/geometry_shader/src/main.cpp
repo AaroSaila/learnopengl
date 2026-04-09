@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <complex>
 #include <cstdio>
 #include <filesystem>
 #include <glm/geometric.hpp>
@@ -18,11 +19,11 @@
 #include <GLFW/glfw3.h>
 
 #include "Camera.hpp"
+#include "Model.hpp"
 #include "Shader.hpp"
 #include "error_handling.hpp"
 #include "quit.hpp"
 #include "trace.hpp"
-#include "Model.hpp"
 
 static int window_width { 800 };
 static int window_height { 600 };
@@ -253,7 +254,7 @@ int main(const int argc, const char** argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    // stbi_set_flip_vertically_on_load(true);
+    stbi_set_flip_vertically_on_load(true);
 
     GLFWwindow* window = glfwCreateWindow(window_width, window_height,
         "LearnOpenGL", nullptr, nullptr);
@@ -277,202 +278,59 @@ int main(const int argc, const char** argv) {
     glViewport(0, 0, window_width, window_height);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-    // Cube
     // clang-format off
-    constexpr std::array cube_vertices {
-        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-
-        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-         0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-
-        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+    constexpr std::array points {
+        -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, // top-left
+         0.5f,  0.5f, 0.0f, 1.0f, 0.0f, // top-right
+         0.5f, -0.5f, 0.0f, 0.0f, 1.0f, // bottom-right
+        -0.5f, -0.5f, 1.0f, 1.0f, 0.0f  // bottom-left
     };
     // clang-format on
+    constexpr std::size_t points_indices_count { points.size() / 5 };
 
-    unsigned int container_vao { };
-    {
-        glGenVertexArrays(1, &container_vao);
+    unsigned int points_vao { };
+    glGenVertexArrays(1, &points_vao);
+    glBindVertexArray(points_vao);
 
-        glBindVertexArray(container_vao);
+    unsigned int points_vbo { };
+    glGenBuffers(1, &points_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        sizeof(float) * points.size(),
+        points.data(),
+        GL_STATIC_DRAW);
 
-        unsigned int container_vbo { };
-        glGenBuffers(1, &container_vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, container_vbo);
-        glBufferData(
-            GL_ARRAY_BUFFER,
-            sizeof(float) * cube_vertices.size(),
-            cube_vertices.data(),
-            GL_STATIC_DRAW);
+    constexpr std::size_t stride { sizeof(float) * 5 };
+    glVertexAttribPointer(
+        0,
+        2,
+        GL_FLOAT,
+        GL_FALSE,
+        stride,
+        (void*) 0);
+    glEnableVertexAttribArray(0);
 
-        const std::size_t stride { sizeof(float) * 6 };
-        glVertexAttribPointer(
-            0,
-            3,
-            GL_FLOAT,
-            GL_FALSE,
-            stride,
-            0);
-        glEnableVertexAttribArray(0);
+    glVertexAttribPointer(
+        1,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+        stride,
+        (void*) (sizeof(float) * 2));
+    glEnableVertexAttribArray(1);
 
-        glVertexAttribPointer(
-            1,
-            3,
-            GL_FLOAT,
-            GL_FALSE,
-            stride,
-            (void*) (3 * sizeof(float)));
-        glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
 
-        glBindVertexArray(0);
-    }
-
-    // Skybox
-    // clang-format off
-    constexpr std::array skybox_vertices {
-        // positions
-        -1.0f, 1.0f, -1.0f,
-        -1.0f, -1.0f, -1.0f,
-        1.0f, -1.0f, -1.0f,
-        1.0f, -1.0f, -1.0f,
-        1.0f, 1.0f, -1.0f,
-        -1.0f, 1.0f, -1.0f,
-
-        -1.0f, -1.0f, 1.0f,
-        -1.0f, -1.0f, -1.0f,
-        -1.0f, 1.0f, -1.0f,
-        -1.0f, 1.0f, -1.0f,
-        -1.0f, 1.0f, 1.0f,
-        -1.0f, -1.0f, 1.0f,
-
-        1.0f, -1.0f, -1.0f,
-        1.0f, -1.0f, 1.0f,
-        1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, -1.0f,
-        1.0f, -1.0f, -1.0f,
-
-        -1.0f, -1.0f, 1.0f,
-        -1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, 1.0f,
-        1.0f, -1.0f, 1.0f,
-        -1.0f, -1.0f, 1.0f,
-
-        -1.0f, 1.0f, -1.0f,
-        1.0f, 1.0f, -1.0f,
-        1.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, 1.0f,
-        -1.0f, 1.0f, 1.0f,
-        -1.0f, 1.0f, -1.0f,
-
-        -1.0f, -1.0f, -1.0f,
-        -1.0f, -1.0f, 1.0f,
-        1.0f, -1.0f, -1.0f,
-        1.0f, -1.0f, -1.0f,
-        -1.0f, -1.0f, 1.0f,
-        1.0f, -1.0f, 1.0f
-    };
-    // clang-format on
-
-    unsigned int skybox_vao { };
-    {
-        glGenVertexArrays(1, &skybox_vao);
-
-        glBindVertexArray(skybox_vao);
-
-        unsigned int skybox_vbo { };
-        glGenBuffers(1, &skybox_vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, skybox_vbo);
-        glBufferData(
-            GL_ARRAY_BUFFER,
-            sizeof(float) * skybox_vertices.size(),
-            skybox_vertices.data(),
-            GL_STATIC_DRAW);
-
-        constexpr std::size_t stride { sizeof(float) * 3 };
-        glVertexAttribPointer(
-            0,
-            3,
-            GL_FLOAT,
-            GL_FALSE,
-            stride,
-            0);
-        glEnableVertexAttribArray(0);
-
-        glBindVertexArray(0);
-    }
-
-    // Shaders
+    const std::filesystem::path geometry_shader_path { shaders_path / "explode.geom" };
     Shader shader {
-        shaders_path / "container.vert",
-        shaders_path / "container.frag"
+        shaders_path / "explode.vert",
+        shaders_path / "explode.frag",
+        &geometry_shader_path
     };
-
-    Shader skybox_shader {
-        shaders_path / "skybox.vert",
-        shaders_path / "skybox.frag"
-    };
-
-    Shader refract_shader {
-        shaders_path / "container.vert",
-        shaders_path / "refraction.frag"
-    };
-
-    // Textures
-    const std::filesystem::path skybox_path { textures_path / "skybox" };
-    const std::vector<std::filesystem::path> skybox_faces {
-        skybox_path / "right.jpg",
-        skybox_path / "left.jpg",
-        skybox_path / "top.jpg",
-        skybox_path / "bottom.jpg",
-        skybox_path / "front.jpg",
-        skybox_path / "back.jpg",
-    };
-
-    // const unsigned int cube_texture { texture_load(textures_path / "container.jpg") };
-    const unsigned int skybox_texture { cubemap_load(skybox_faces) };
-
-    glm::mat4 container_model { 1.0f };
-    container_model = glm::translate(container_model, glm::vec3 { -2.0f, 0.0f, 0.0f });
 
     Model backpack { (models_path / "backpack" / "backpack.obj").c_str() };
-    glm::mat4 backpack_model { 1.0f };
-    backpack_model = glm::translate(backpack_model, glm::vec3 { 2.0f, 0.0f, 0.0f });
+    glm::mat4 backpack_model { glm::translate(glm::mat4 { 1.0f }, glm::vec3 { 0.0f }) };
 
     glEnable(GL_DEPTH_TEST);
 
@@ -484,7 +342,7 @@ int main(const int argc, const char** argv) {
 
         process_input(window);
 
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // View
@@ -498,34 +356,12 @@ int main(const int argc, const char** argv) {
             glm::perspective(camera.get_fov_rad(), aspect_ratio, near_plane, far_plane)
         };
 
-        // Cube
         shader.use();
         shader.set_mat4("view", view);
         shader.set_mat4("projection", projection);
-        shader.set_mat4("model", container_model);
-        shader.set_vec3("camera_pos", camera.get_pos());
-        glBindVertexArray(container_vao);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_texture);
-        glDrawArrays(GL_TRIANGLES, 0, cube_vertices.size());
-
-        // Backpack
-        refract_shader.use();
-        refract_shader.set_mat4("view", view);
-        refract_shader.set_mat4("projection", projection);
-        refract_shader.set_mat4("model", backpack_model);
-        refract_shader.set_vec3("camera_position", camera.get_pos());
-        backpack.draw(refract_shader);
-
-        // Skybox
-        skybox_shader.use();
-        skybox_shader.set_mat4("view", glm::mat4 { glm::mat3 { view } });
-        skybox_shader.set_mat4("projection", projection);
-
-        glDepthFunc(GL_LEQUAL);
-        glBindVertexArray(skybox_vao);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_texture);
-        glDrawArrays(GL_TRIANGLES, 0, skybox_vertices.size());
-        glDepthFunc(GL_LESS);
+        shader.set_mat4("model", backpack_model);
+        shader.set_float("time", current_time);
+        backpack.draw(shader);
 
         glfwSwapBuffers(window);
         glfwPollEvents();

@@ -22,23 +22,23 @@ Mesh::Mesh(
 
 void Mesh::draw(Shader& shader) const {
     (void)shader;
-    // unsigned int diffuse_nr { 0 };
-    // unsigned int specular_nr { 0 };
-    // for (std::size_t i { 0 }; i < this->textures.size(); i++) {
-    //     glActiveTexture(GL_TEXTURE0 + i);
-    //     std::string number {};
-    //     const std::string name { this->textures[i].type };
-    //     if (name == "texture_diffuse") {
-    //         number = std::to_string(diffuse_nr);
-    //         diffuse_nr++;
-    //     } else if (name == "texture_specular") {
-    //         number = std::to_string(specular_nr);
-    //         specular_nr++;
-    //     }
-    //
-    //     shader.set_int(std::format("material.{}s[{}]", name, number).c_str(), i);
-    //     glBindTexture(GL_TEXTURE_2D, this->textures[i].id);
-    // }
+    unsigned int diffuse_nr { 0 };
+    unsigned int specular_nr { 0 };
+    for (std::size_t i { 0 }; i < this->textures.size(); i++) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        std::string number {};
+        const std::string name { this->textures[i].type };
+        if (name == "texture_diffuse") {
+            number = std::to_string(diffuse_nr);
+            diffuse_nr++;
+        } else if (name == "texture_specular") {
+            number = std::to_string(specular_nr);
+            specular_nr++;
+        }
+
+        shader.set_int(std::format("material.{}s[{}]", name, number).c_str(), i);
+        glBindTexture(GL_TEXTURE_2D, this->textures[i].id);
+    }
 
     glBindVertexArray(this->vao);
     glDrawElements(GL_TRIANGLES, static_cast<unsigned int>(indices.size()), GL_UNSIGNED_INT, 0);
