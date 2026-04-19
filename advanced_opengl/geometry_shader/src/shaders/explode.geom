@@ -18,7 +18,7 @@ vec3 get_normal() {
 }
 
 vec4 explode(vec4 position, vec3 normal) {
-    float magnitude = 2.0;
+    float magnitude = 4.0;
     vec3 direction = normal * ((sin(time) + 1.0) / 2.0) * magnitude;
     return position + vec4(direction, 0.0);
 }
@@ -26,29 +26,17 @@ vec4 explode(vec4 position, vec3 normal) {
 void main() {
     vec3 normal = get_normal();
 
-    gl_Position = explode(gl_in[0].gl_Position, normal);
-    tex_coords = gs_in[0].tex_coords;
-    EmitVertex();
+    for (uint i = 0; i < 3; i++) {
+        // Explode
+        // gl_Position = explode(gl_in[i].gl_Position, normal);
+        // tex_coords = gs_in[i].tex_coords;
+        // EmitVertex();
 
-    gl_Position = explode(gl_in[1].gl_Position, normal);
-    tex_coords = gs_in[1].tex_coords;
-    EmitVertex();
-
-    gl_Position = explode(gl_in[2].gl_Position, normal);
-    tex_coords = gs_in[2].tex_coords;
-    EmitVertex();
-
-    // gl_Position = gl_in[0].gl_Position;
-    // tex_coords = gs_in[0].tex_coords;
-    // EmitVertex();
-    //
-    // gl_Position = gl_in[1].gl_Position;
-    // tex_coords = gs_in[1].tex_coords;
-    // EmitVertex();
-    //
-    // gl_Position = gl_in[2].gl_Position;
-    // tex_coords = gs_in[2].tex_coords;
-    // EmitVertex();
+        // Passthrough
+        gl_Position = gl_in[i].gl_Position;
+        tex_coords = gs_in[i].tex_coords;
+        EmitVertex();
+    }
 
     EndPrimitive();
 }

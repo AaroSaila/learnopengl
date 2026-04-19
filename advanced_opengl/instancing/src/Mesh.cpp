@@ -21,6 +21,7 @@ Mesh::Mesh(
 // public
 
 void Mesh::draw(Shader& shader) const {
+    (void)shader;
     unsigned int diffuse_nr { 0 };
     unsigned int specular_nr { 0 };
     for (std::size_t i { 0 }; i < this->textures.size(); i++) {

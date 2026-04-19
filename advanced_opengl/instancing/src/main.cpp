@@ -1,9 +1,10 @@
 #include <assert.h>
-#include <complex>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <glm/geometric.hpp>
 #include <string_view>
+#include <memory>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -33,7 +34,7 @@ static constexpr struct {
     float speed;
     float mouse_sensitivity;
 } camera_defaults {
-    .pos = glm::vec3 { 0.0f, 1.0f, 3.0f },
+    .pos = glm::vec3 { 0.0f, 15.0f, 25.0f },
     .fov_deg = 70.0f,
     .speed = 2.5f,
     .mouse_sensitivity = 0.05f
@@ -232,7 +233,7 @@ unsigned int cubemap_load(const std::vector<std::filesystem::path>& faces) {
 int main(const int argc, const char** argv) {
     (void) argc;
 
-    Trace::current_level = Trace::Level::DEBUG;
+    Trace::current_level = Trace::Level::NONE;
 
     textures_path = std::filesystem::path { argv[0] }.remove_filename() /= std::filesystem::path { TEXTURES_PATH };
     shaders_path = std::filesystem::path { argv[0] }.remove_filename() /= std::filesystem::path { SHADERS_PATH };
@@ -278,66 +279,165 @@ int main(const int argc, const char** argv) {
     glViewport(0, 0, window_width, window_height);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-    // clang-format off
-    constexpr std::array points {
-        -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, // top-left
-         0.5f,  0.5f, 0.0f, 1.0f, 0.0f, // top-right
-         0.5f, -0.5f, 0.0f, 0.0f, 1.0f, // bottom-right
-        -0.5f, -0.5f, 1.0f, 1.0f, 0.0f  // bottom-left
+    // std::array<glm::vec2, 100> translations { };
+    // {
+    //     int index { 0 };
+    //     float offset { 0.1f };
+    //     for (int y { -10 }; y < 10; y += 2) {
+    //         for (int x { -10 }; x < 10; x += 2) {
+    //             glm::vec2& translation { translations[index] };
+    //             translation.x = (float) x / 10.0f + offset;
+    //             translation.y = (float) y / 10.0f + offset;
+    //             index++;
+    //         }
+    //     }
+    // }
+    //
+    // unsigned int instance_vbo { };
+    // glGenBuffers(1, &instance_vbo);
+    // glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
+    // glBufferData(
+    //     GL_ARRAY_BUFFER,
+    //     sizeof(glm::vec2) * translations.size(),
+    //     translations.data(),
+    //     GL_STATIC_DRAW);
+    // glBindBuffer(GL_ARRAY_BUFFER, 0);
+    //
+    // // clang-format off
+    // constexpr std::array quad_vertices {
+    //     // positions     // colors
+    //     -0.05f,  0.05f,  1.0f, 0.0f, 0.0f,
+    //      0.05f, -0.05f,  0.0f, 1.0f, 0.0f,
+    //     -0.05f, -0.05f,  0.0f, 0.0f, 1.0f,
+    //
+    //     -0.05f,  0.05f,  1.0f, 0.0f, 0.0f,
+    //      0.05f, -0.05f,  0.0f, 1.0f, 0.0f,
+    //      0.05f,  0.05f,  0.0f, 1.0f, 1.0f
+    // };
+    // // clang-format on
+    // constexpr std::size_t quad_vert_count { quad_vertices.size() / 5 };
+    //
+    // unsigned int quad_vao { };
+    // glGenVertexArrays(1, &quad_vao);
+    // glBindVertexArray(quad_vao);
+    //
+    // unsigned int quad_vbo { };
+    // glGenBuffers(1, &quad_vbo);
+    // glBindBuffer(GL_ARRAY_BUFFER, quad_vbo);
+    // glBufferData(
+    //     GL_ARRAY_BUFFER,
+    //     sizeof(float) * quad_vertices.size(),
+    //     quad_vertices.data(),
+    //     GL_STATIC_DRAW);
+    //
+    // constexpr std::size_t quad_stride { sizeof(float) * 5 };
+    // glVertexAttribPointer(
+    //     0,
+    //     2,
+    //     GL_FLOAT,
+    //     GL_FALSE,
+    //     quad_stride,
+    //     (void*) 0);
+    // glEnableVertexAttribArray(0);
+    // glVertexAttribPointer(
+    //     1,
+    //     3,
+    //     GL_FLOAT,
+    //     GL_FALSE,
+    //     quad_stride,
+    //     (void*) (sizeof(float) * 2));
+    // glEnableVertexAttribArray(1);
+    //
+    // glEnableVertexAttribArray(2);
+    // glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
+    // glVertexAttribPointer(
+    //     2,
+    //     2,
+    //     GL_FLOAT,
+    //     GL_FALSE,
+    //     2 * sizeof(float),
+    //     (void*) 0);
+    // glBindBuffer(GL_ARRAY_BUFFER, 0);
+    // glVertexAttribDivisor(2, 1);
+    //
+    // glBindVertexArray(0);
+    //
+    // Shader quads_shader {
+    //     shaders_path / "quads.vert",
+    //     shaders_path / "quads.frag"
+    // };
+
+    auto asteroid_models { std::make_shared<std::array<glm::mat4, 1024000>>() };
+    {
+        std::srand(glfwGetTime());
+        constexpr float radius { 100.0f };
+        constexpr float offset { 35.0f };
+        for (std::size_t i { 0 }; i < asteroid_models->size(); i++) {
+            glm::mat4 model { 1.0f };
+            const float angle { (float) i / (float) asteroid_models->size() * 360.0f };
+            float displacement { (std::rand() % (int) (2 * offset * 100)) / 100.0f - offset };
+            const float x { std::sin(angle) * radius + displacement };
+            displacement = (std::rand() % (int) (2 * offset * 100)) / 100.0f - offset;
+            const float y { displacement * 0.4f };
+            displacement = (std::rand() % (int) (2 * offset * 100)) / 100.0f - offset;
+            const float z { std::cos(angle) * radius + displacement };
+            model = glm::translate(model, glm::vec3 { x, y, z });
+
+            const float scale { (std::rand() % 20) / 100.0f + 0.05f };
+            model = glm::scale(model, glm::vec3 { scale });
+
+            const float rot_angle { static_cast<float>(std::rand() % 360) };
+            model = glm::rotate(model, rot_angle, glm::vec3 { 0.4f, 0.6f, 0.8f });
+
+            asteroid_models->at(i) = model;
+        }
+    }
+
+    Model planet { (models_path / "planet" / "planet.obj").c_str() };
+    Model rock { (models_path / "rock" / "rock.obj").c_str() };
+
+    {
+        unsigned int buffer { };
+        glGenBuffers(1, &buffer);
+        glBindBuffer(GL_ARRAY_BUFFER, buffer);
+        glBufferData(
+            GL_ARRAY_BUFFER,
+            asteroid_models->size() * sizeof(glm::mat4),
+            asteroid_models->data(),
+            GL_STATIC_DRAW);
+
+        for (const auto& mesh : rock.meshes) {
+            glBindVertexArray(mesh.vao);
+            for (std::size_t i { 3 }, offset { 0 }; i <= 6; i++, offset++) {
+                glEnableVertexAttribArray(i);
+                glVertexAttribPointer(
+                    i,
+                    4,
+                    GL_FLOAT,
+                    GL_FALSE,
+                    4 * sizeof(glm::vec4),
+                    (void*) (offset * sizeof(glm::vec4)));
+                glVertexAttribDivisor(i, 1);
+            }
+            glBindVertexArray(0);
+        }
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+
+    glm::mat4 planet_model { 1.0f };
+    planet_model = glm::translate(planet_model, glm::vec3 { 0.0f, -3.0f, 0.0f });
+    planet_model = glm::scale(planet_model, glm::vec3 { 4.0f });
+
+    Shader planet_shader {
+        shaders_path / "planet.vert",
+        shaders_path / "planet.frag"
     };
-    // clang-format on
-    constexpr std::size_t points_indices_count { points.size() / 5 };
 
-    unsigned int points_vao { };
-    glGenVertexArrays(1, &points_vao);
-    glBindVertexArray(points_vao);
-
-    unsigned int points_vbo { };
-    glGenBuffers(1, &points_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
-    glBufferData(
-        GL_ARRAY_BUFFER,
-        sizeof(float) * points.size(),
-        points.data(),
-        GL_STATIC_DRAW);
-
-    constexpr std::size_t stride { sizeof(float) * 5 };
-    glVertexAttribPointer(
-        0,
-        2,
-        GL_FLOAT,
-        GL_FALSE,
-        stride,
-        (void*) 0);
-    glEnableVertexAttribArray(0);
-
-    glVertexAttribPointer(
-        1,
-        3,
-        GL_FLOAT,
-        GL_FALSE,
-        stride,
-        (void*) (sizeof(float) * 2));
-    glEnableVertexAttribArray(1);
-
-    glBindVertexArray(0);
-
-    const std::filesystem::path geometry_shader_path { shaders_path / "explode.geom" };
-    Shader shader {
-        shaders_path / "explode.vert",
-        shaders_path / "explode.frag",
-        &geometry_shader_path
+    Shader instanced_shader {
+        shaders_path / "instanced.vert",
+        shaders_path / "planet.frag"
     };
-    const std::filesystem::path normals_geom_shader_path { shaders_path / "normals.geom" };
-    Shader normals_shader {
-        shaders_path / "normals.vert",
-        shaders_path / "normals.frag",
-        &normals_geom_shader_path
-
-    };
-
-    Model backpack { (models_path / "backpack" / "backpack.obj").c_str() };
-    glm::mat4 backpack_model { glm::translate(glm::mat4 { 1.0f }, glm::vec3 { 0.0f }) };
 
     glEnable(GL_DEPTH_TEST);
 
@@ -358,23 +458,34 @@ int main(const int argc, const char** argv) {
         // Projection
         const float aspect_ratio { static_cast<float>(window_width) / window_height };
         constexpr float near_plane { 0.1f };
-        constexpr float far_plane { 100.0f };
+        constexpr float far_plane { 200.0f };
         const glm::mat4 projection {
             glm::perspective(camera.get_fov_rad(), aspect_ratio, near_plane, far_plane)
         };
 
-        shader.use();
-        shader.set_mat4("view", view);
-        shader.set_mat4("projection", projection);
-        shader.set_mat4("model", backpack_model);
-        // shader.set_float("time", current_time);
-        backpack.draw(shader);
+        // quads_shader.use();
+        // glBindVertexArray(quad_vao);
+        // glDrawArraysInstanced(GL_TRIANGLES, 0, quad_vert_count, 100);
 
-        normals_shader.use();
-        normals_shader.set_mat4("view", view);
-        normals_shader.set_mat4("projection", projection);
-        normals_shader.set_mat4("model", backpack_model);
-        backpack.draw(shader);
+        planet_shader.use();
+        planet_shader.set_mat4("model", planet_model);
+        planet_shader.set_mat4("view", view);
+        planet_shader.set_mat4("projection", projection);
+        planet.draw(planet_shader);
+
+        instanced_shader.use();
+        instanced_shader.set_mat4("view", view);
+        instanced_shader.set_mat4("projection", projection);
+        for (const auto& mesh : rock.meshes) {
+            glBindVertexArray(mesh.vao);
+            glDrawElementsInstanced(
+                GL_TRIANGLES,
+                mesh.indices.size(),
+                GL_UNSIGNED_INT,
+                0,
+                asteroid_models->size());
+            glBindVertexArray(0);
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
