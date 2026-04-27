@@ -358,6 +358,10 @@ int main(const int argc, const char** argv) {
     };
     // clang-format on
 
+    constexpr std::size_t screen_quad_vert_count {
+        screen_quad_vertices.size() / 4
+    };
+
     const unsigned int screen_quad_vao { make_vao(
         screen_quad_vertices.data(),
         screen_quad_vertices.size() * sizeof(float),
@@ -376,6 +380,10 @@ int main(const int argc, const char** argv) {
         -5.0f, -0.5f, -5.0f,  0.0f, 2.0f,
     };
     // clang-format on
+
+    constexpr std::size_t plane_vert_count {
+        plane_vertices.size() / 5
+    };
 
     const unsigned int plane_vao { make_vao(
         plane_vertices.data(),
@@ -428,6 +436,10 @@ int main(const int argc, const char** argv) {
         -0.5f,  0.5f,  0.5f,  0.0f, 0.0f  // bottom-left
     };
     // clang-format on
+
+    constexpr std::size_t cube_vert_count {
+        cube_vertices.size() / 5
+    };
 
     const unsigned int cube_vao { make_vao(
         cube_vertices.data(),
@@ -503,7 +515,7 @@ int main(const int argc, const char** argv) {
         shader.set_int("texture_map", plane_texture_i);
         shader.set_mat4("model", plane_model);
         glBindVertexArray(plane_vao);
-        glDrawArrays(GL_TRIANGLES, 0, plane_vertices.size());
+        glDrawArrays(GL_TRIANGLES, 0, plane_vert_count);
 
         // Cubes
 
@@ -511,10 +523,10 @@ int main(const int argc, const char** argv) {
 
         shader.set_mat4("model", cube1_model);
         glBindVertexArray(cube_vao);
-        glDrawArrays(GL_TRIANGLES, 0, cube_vertices.size());
+        glDrawArrays(GL_TRIANGLES, 0, cube_vert_count);
 
         shader.set_mat4("model", cube2_model);
-        glDrawArrays(GL_TRIANGLES, 0, cube_vertices.size());
+        glDrawArrays(GL_TRIANGLES, 0, cube_vert_count);
 
         // default framebuffer
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -526,7 +538,7 @@ int main(const int argc, const char** argv) {
         glBindVertexArray(screen_quad_vao);
         glDisable(GL_DEPTH_TEST);
         // glBindTexture(GL_TEXTURE_2D, fb_texture);
-        glDrawArrays(GL_TRIANGLES, 0, screen_quad_vertices.size());
+        glDrawArrays(GL_TRIANGLES, 0, screen_quad_vert_count);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
