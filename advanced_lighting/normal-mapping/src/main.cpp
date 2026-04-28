@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <glm/geometric.hpp>
+#include <print>
 #include <string_view>
 
 #include <glm/glm.hpp>
@@ -32,7 +33,7 @@ static constexpr struct {
     float speed;
     float mouse_sensitivity;
 } camera_defaults {
-    .pos = glm::vec3 { 0.0f, 1.0f, 4.0f },
+    .pos = glm::vec3 { 0.0f, 0.0f, 4.0f },
     .fov_deg = 70.0f,
     .speed = 2.5f,
     .mouse_sensitivity = 0.05f
@@ -58,7 +59,7 @@ static float delta_time { 0.0f };
 static float last_frame { 0.0f };
 static bool cursor_mouse_enabled { true };
 static bool first_mouse_input { true };
-static bool depth_map_is_big { false };
+static bool normal_map_disabled { false };
 
 std::filesystem::path textures_path { };
 std::filesystem::path shaders_path { };
@@ -136,12 +137,17 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         int current_mode { };
         glGetIntegerv(GL_POLYGON_MODE, &current_mode);
         glPolygonMode(GL_FRONT_AND_BACK, current_mode == GL_FILL ? GL_LINE : GL_FILL);
-    } else if (key == GLFW_KEY_M && action == GLFW_PRESS) {
-        depth_map_is_big = !depth_map_is_big;
+    } else if (key == GLFW_KEY_N && action == GLFW_PRESS) {
+        normal_map_disabled = !normal_map_disabled;
     }
 }
 
-unsigned int texture_load(const std::filesystem::path& path, const GLenum internal_format, const GLenum format, const int wrap_method = GL_REPEAT) {
+unsigned int texture_load(
+    const std::filesystem::path& path,
+    const GLenum internal_format,
+    const GLenum format,
+    const bool flip = true,
+    const int wrap_method = GL_REPEAT) {
     if (!std::filesystem::exists(path)) {
         log_error(std::format("The given image file '{}' does not exist.",
             path.c_str())
@@ -149,6 +155,7 @@ unsigned int texture_load(const std::filesystem::path& path, const GLenum intern
         quit(1);
     }
 
+    stbi_set_flip_vertically_on_load(flip);
     int img_w { };
     int img_h { };
     int img_nr_channels { };
@@ -256,8 +263,6 @@ int main(const int argc, const char** argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    stbi_set_flip_vertically_on_load(true);
-
     GLFWwindow* window = glfwCreateWindow(window_width, window_height,
         "LearnOpenGL", nullptr, nullptr);
     if (window == nullptr) {
@@ -328,65 +333,147 @@ int main(const int argc, const char** argv) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 
-    // clang-format off
-    constexpr std::array square_vertices {
-    //  pos                  normal              tex coords
-         1.0f,  1.0f, 0.0f,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f, // top-right
-        -1.0f,  1.0f, 0.0f,  0.0f, 0.0f, 1.0f,  0.0f, 1.0f, // top-left
-         1.0f, -1.0f, 0.0f,  0.0f, 0.0f, 1.0f,  1.0f, 0.0f, // bottom-right
-
-        -1.0f,  1.0f, 0.0f,  0.0f, 0.0f, 1.0f,  0.0f, 1.0f, // top-left
-        -1.0f, -1.0f, 0.0f,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f, // bottom-left
-         1.0f, -1.0f, 0.0f,  0.0f, 0.0f, 1.0f,  1.0f, 0.0f, // bottom-right
-    };
-    // clang-format on
-
-    constexpr std::size_t square_stride { 8 * sizeof(float) };
+    // 6 * (pos + normal + tangent + bitangent + tex_coords)
+    std::array<float, 6 * (4 * 3 + 2)> square_vertices { };
+    constexpr std::size_t square_stride { (4 * 3 + 2) * sizeof(float) };
     constexpr std::size_t square_vert_count {
         sizeof(float) * square_vertices.size() / square_stride
     };
-
     unsigned int square_vao { };
-    glGenVertexArrays(1, &square_vao);
-    glBindVertexArray(square_vao);
-
     unsigned int square_vbo { };
-    glGenBuffers(1, &square_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, square_vbo);
-    glBufferData(
-        GL_ARRAY_BUFFER,
-        sizeof(float) * square_vertices.size(),
-        square_vertices.data(),
-        GL_STATIC_DRAW);
+    {
+        constexpr std::array<glm::vec3, 4> pos {
+            glm::vec3 { -1.0f, 1.0f, 0.0f },
+            glm::vec3 { -1.0f, -1.0f, 0.0f },
+            glm::vec3 { 1.0f, -1.0f, 0.0f },
+            glm::vec3 { 1.0f, 1.0f, 0.0f },
+        };
+        constexpr std::array<glm::vec2, 4> uv {
+            glm::vec2 { 0.0f, 1.0f },
+            glm::vec2 { 0.0f, 0.0f },
+            glm::vec2 { 1.0f, 0.0f },
+            glm::vec2 { 1.0f, 1.0f },
+        };
+        constexpr glm::vec3 nm { 0.0f, 0.0f, 1.0f };
 
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(
-        0,
-        3,
-        GL_FLOAT,
-        GL_FALSE,
-        square_stride,
-        (void*) 0);
+        constexpr glm::vec3 edge1 { pos.at(1) - pos.at(0) };
+        constexpr glm::vec3 edge2 { pos.at(2) - pos.at(0) };
+        constexpr glm::vec2 delta_uv1 { uv.at(1) - uv.at(0) };
+        constexpr glm::vec2 delta_uv2 { uv.at(2) - uv.at(0) };
+        constexpr float f { 1.0f / (delta_uv1.x * delta_uv2.y - delta_uv2.x * delta_uv1.y) };
+        const glm::vec3 tangent { glm::normalize(glm::vec3 {
+            f * (delta_uv2.y * edge1.x - delta_uv1.y * edge2.x),
+            f * (delta_uv2.y * edge1.y - delta_uv1.y * edge2.y),
+            f * (delta_uv2.y * edge1.z - delta_uv1.y * edge2.z) }) };
+        const glm::vec3 bitangent { glm::normalize(glm::vec3 {
+            f * (-delta_uv2.x * edge1.x + delta_uv1.x * edge2.x),
+            f * (-delta_uv2.x * edge1.y + delta_uv1.x * edge2.y),
+            f * (-delta_uv2.x * edge1.z + delta_uv1.x * edge2.z) }) };
 
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(
-        1,
-        3,
-        GL_FLOAT,
-        GL_FALSE,
-        square_stride,
-        (void*) (sizeof(float) * 3));
+        // clang-format off
+        constexpr std::array<unsigned int, 6> square_indices {
+            0, 1, 2,
+            0, 2, 3
+        };
+        // clang-format on
+        constexpr std::size_t normal_offset { 3 };
+        constexpr std::size_t tex_coord_offset { normal_offset + 3 };
+        constexpr std::size_t tangent_offset { tex_coord_offset + 2 };
+        constexpr std::size_t bitangent_offset { tangent_offset + 3 };
+        constexpr std::size_t stride { bitangent_offset + 3 };
+        for (std::size_t row { 0 }; row < square_indices.size(); row++) {
+            const std::size_t row_first { row * stride };
+            const unsigned int index { square_indices.at(row) };
+            std::size_t j { 0 };
+            // pos
+            for (; j < normal_offset; j++) {
+                const glm::vec3& coords { pos.at(index) };
+                assert(j < coords.length());
+                square_vertices.at(row_first + j) = coords[j];
+            }
+            // normal
+            for (std::size_t i { 0 }; j < tex_coord_offset; j++, i++) {
+                assert(i < nm.length());
+                square_vertices.at(row_first + j) = nm[i];
+            }
+            // tex coords
+            for (std::size_t i { 0 }; j < tangent_offset; j++, i++) {
+                const glm::vec2& tex_coords { uv.at(index) };
+                assert(i < tex_coords.length());
+                square_vertices.at(row_first + j) = tex_coords[i];
+            }
+            // tangent
+            for (std::size_t i { 0 }; j < bitangent_offset; j++, i++) {
+                assert(i < tangent.length());
+                square_vertices.at(row_first + j) = tangent[i];
+            }
+            // bitangent
+            for (std::size_t i { 0 }; j < stride; j++, i++) {
+                assert(i < bitangent.length());
+                square_vertices.at(row_first + j) = bitangent[i];
+            }
+        }
 
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(
-        2,
-        2,
-        GL_FLOAT,
-        GL_FALSE,
-        square_stride,
-        (void*) (sizeof(float) * 6));
+        glGenVertexArrays(1, &square_vao);
+        glBindVertexArray(square_vao);
 
-    glBindVertexArray(0);
+        glGenBuffers(1, &square_vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, square_vbo);
+        glBufferData(
+            GL_ARRAY_BUFFER,
+            sizeof(float) * square_vertices.size(),
+            square_vertices.data(),
+            GL_STATIC_DRAW);
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(
+            0,
+            3,
+            GL_FLOAT,
+            GL_FALSE,
+            square_stride,
+            (void*) 0);
+
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(
+            1,
+            3,
+            GL_FLOAT,
+            GL_FALSE,
+            square_stride,
+            (void*) (sizeof(float) * normal_offset));
+
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(
+            2,
+            2,
+            GL_FLOAT,
+            GL_FALSE,
+            square_stride,
+            (void*) (sizeof(float) * tex_coord_offset));
+
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(
+            3,
+            3,
+            GL_FLOAT,
+            GL_FALSE,
+            square_stride,
+            (void*) (sizeof(float) * tangent_offset));
+
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(
+            4,
+            3,
+            GL_FLOAT,
+            GL_FALSE,
+            square_stride,
+            (void*) (sizeof(float) * bitangent_offset));
+
+        glBindVertexArray(0);
+    }
+
+    std::println("square_vertices:\n{}", square_vertices);
 
     // clang-format off
     constexpr std::array cube_vertices {
@@ -504,39 +591,22 @@ int main(const int argc, const char** argv) {
         shaders_path / "render_depth.frag"
     };
 
-    const unsigned int plane_texture {
-        texture_load(textures_path / "metal.png", GL_SRGB, GL_RGB)
+    const unsigned int brick_texture {
+        texture_load(textures_path / "brickwall.jpg", GL_SRGB, GL_RGB)
+    };
+
+    const unsigned int brick_normal_map {
+        texture_load(textures_path / "normal-maps" / "brickwall_normal.jpg", GL_RGB, GL_RGB)
     };
 
     const unsigned int cube_texture {
         texture_load(textures_path / "marble.jpg", GL_SRGB, GL_RGB)
     };
 
-    glm::mat4 plane_model { 1.0f };
-    plane_model = glm::translate(plane_model, glm::vec3 { 0.0f, -0.5f, 0.0f });
-    plane_model = glm::rotate(plane_model, glm::radians(90.0f), glm::vec3 { -1.0f, 0.0f, 0.0f });
-    plane_model = glm::scale(plane_model, glm::vec3 { 100.0f, 100.0f, 1.0f });
-
-    std::vector<glm::mat4> cube_models { };
-    cube_models.reserve(3);
-    {
-        glm::vec3 cube_pos { 0.0f, 1.5f, 0.0f };
-        glm::mat4 cube_model { 1.0f };
-        cube_model = glm::translate(cube_model, cube_pos);
-        cube_model = glm::scale(cube_model, glm::vec3 { 0.5f });
-        cube_models.emplace_back(cube_model);
-
-        cube_pos = { 2.0f, 0.0f, 0.0f };
-        cube_model = glm::translate(glm::mat4 { 1.0f }, cube_pos);
-        cube_model = glm::scale(cube_model, glm::vec3 { 0.5f });
-        cube_models.emplace_back(cube_model);
-
-        cube_pos = { -1.0f, 0.0f, 2.0f };
-        cube_model = glm::translate(glm::mat4 { 1.0f }, cube_pos);
-        cube_model = glm::rotate(cube_model, glm::radians(60.0f), glm::normalize(glm::vec3 { 1.0f, 0.0f, 1.0f }));
-        cube_model = glm::scale(cube_model, glm::vec3 { 0.25f });
-        cube_models.emplace_back(cube_model);
-    }
+    glm::mat4 wall_model { 1.0f };
+    // wall_model = glm::translate(wall_model, glm::vec3 { 0.0f });
+    wall_model = glm::translate(wall_model, glm::vec3 { 0.0f, -1.0f, 0.0f });
+    wall_model = glm::rotate(wall_model, glm::radians(-90.0f), glm::vec3 { 1.0f, 0.0f, 0.0f });
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_FRAMEBUFFER_SRGB);
@@ -577,10 +647,10 @@ int main(const int argc, const char** argv) {
 
         process_input(window);
 
-        glm::vec3 light_pos { std::cos(current_time / 2), 2.0f, std::sin(current_time / 2) };
+        glm::vec3 light_pos { std::cos(current_time / 2), 0.0f, std::sin(current_time / 2) };
         light_pos.x *= 2.0f;
         light_pos.z *= 2.0f;
-        // glm::vec3 light_pos { 0.0f };
+        // glm::vec3 light_pos { 1.0f, 0.5f, 1.0f };
         glm::mat4 light_source_model { 1.0f };
         light_source_model = glm::translate(light_source_model, light_pos);
         light_source_model = glm::scale(light_source_model, glm::vec3 { 0.1f });
@@ -590,7 +660,7 @@ int main(const int argc, const char** argv) {
 
         // Projection
         const float aspect_ratio { static_cast<float>(window_width) / window_height };
-        constexpr float near_plane { 0.1f };
+        constexpr float near_plane { 0.05f };
         constexpr float far_plane { 200.0f };
         const glm::mat4 projection {
             glm::perspective(camera.get_fov_rad(), aspect_ratio, near_plane, far_plane)
@@ -604,20 +674,13 @@ int main(const int argc, const char** argv) {
         depth_cubemap_shader.use();
         for (std::size_t i { 0 }; i < shadow_transform_look_dirs.size(); i++) {
             depth_cubemap_shader.set_mat4(
-                    std::format("shadow_matrices[{}]", i),
-                    shadow_projection * glm::lookAt(light_pos, light_pos + shadow_transform_look_dirs[i], shadow_transform_ups[i]));
+                std::format("shadow_matrices[{}]", i),
+                shadow_projection * glm::lookAt(light_pos, light_pos + shadow_transform_look_dirs[i], shadow_transform_ups[i]));
         }
         depth_cubemap_shader.set_vec3("light_pos", light_pos);
         depth_cubemap_shader.set_float("far_plane", shadow_projection_far_plane);
 
-        for (auto& model : cube_models) {
-            depth_cubemap_shader.set_mat4("model", model);
-            glBindVertexArray(cube_vao);
-            glDrawArrays(GL_TRIANGLES, 0, cube_vert_count);
-            glBindVertexArray(0);
-        }
-
-        depth_cubemap_shader.set_mat4("model", plane_model);
+        depth_cubemap_shader.set_mat4("model", wall_model);
         glBindVertexArray(square_vao);
         glDrawArrays(GL_TRIANGLES, 0, square_vert_count);
         glBindVertexArray(0);
@@ -640,22 +703,19 @@ int main(const int argc, const char** argv) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_CUBE_MAP, depth_cubemap);
         glActiveTexture(GL_TEXTURE0);
+        shader.set_int("normal_map", 2);
 
-        shader.set_float("shininess", 5.0f);
-        shader.set_mat4("model", plane_model);
-        glBindTexture(GL_TEXTURE_2D, plane_texture);
+        shader.set_float("shininess", 100.0f);
+        shader.set_mat4("model", wall_model);
+        shader.set_bool("normal_map_disabled", normal_map_disabled);
+        glBindTexture(GL_TEXTURE_2D, brick_texture);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, brick_normal_map);
         glBindVertexArray(square_vao);
         glDrawArrays(GL_TRIANGLES, 0, square_vert_count);
         glBindTexture(GL_TEXTURE_2D, 0);
-        glBindVertexArray(0);
-
-        shader.set_float("shininess", 100.0f);
-        glBindTexture(GL_TEXTURE_2D, cube_texture);
-        glBindVertexArray(cube_vao);
-        for (auto& model : cube_models) {
-            shader.set_mat4("model", model);
-            glDrawArrays(GL_TRIANGLES, 0, cube_vert_count);
-        }
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glBindVertexArray(0);
 
         single_color.use();

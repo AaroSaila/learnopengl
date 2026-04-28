@@ -2,6 +2,8 @@
 
 uniform sampler2D diffuse_texture;
 uniform samplerCube depth_map;
+uniform sampler2D normal_map;
+uniform bool normal_map_disabled;
 uniform vec3 light_pos;
 uniform vec3 view_pos;
 uniform float shininess;
@@ -29,7 +31,6 @@ float shadow_calculation(vec3 frag_pos) {
     int samples = 20;
     float view_distance = length(view_pos - frag_pos);
     float disk_radius = (1.0 + (view_distance / far_plane)) / 70.0;
-    // float disk_radius = (view_distance / far_plane);
     vec3 light_to_frag = frag_pos - light_pos;
 
     for (int i = 0; i < samples; i++) {
@@ -46,27 +47,35 @@ float shadow_calculation(vec3 frag_pos) {
 }
 
 void main() {
+    float brightness = 0.4;
+    vec3 light_color = vec3(1.0);
+    float ambient_mag = 0.01;
+    float diffuse_mag = 1.0;
+    float specular_mag = 2.0;
+
     vec3 rgb = texture(diffuse_texture, fs_in.tex_coords).rgb;
     vec3 normal = normalize(fs_in.normal_vector);
-    vec3 light_color = vec3(1.0);
+    if (!normal_map_disabled) {
+        normal = texture(normal_map, fs_in.tex_coords).rgb;
+        normal = normalize(normal * 2.0 - 1.0);
+    }
 
     // Ambient
-    vec3 ambient = 0.05 * light_color;
+    vec3 ambient = light_color * ambient_mag;
 
     // Diffuse
     vec3 light_dir = normalize(light_pos - fs_in.frag_pos);
-    float diff_mag = max(dot(light_dir, normal), 0.0);
-    vec3 diffuse = diff_mag * light_color;
+    float diff_strength = max(dot(light_dir, normal), 0.0);
+    vec3 diffuse = diff_strength * light_color * diffuse_mag;
 
     // Specular
     vec3 view_dir = normalize(view_pos - fs_in.frag_pos);
     vec3 halfway = normalize(view_dir + light_dir);
     float spec_mag = pow(max(dot(normal, halfway), 0.0), shininess);
-    vec3 specular = spec_mag * light_color * 0.8;
+    vec3 specular = spec_mag * light_color * specular_mag;
 
     float shadow = shadow_calculation(fs_in.frag_pos);
     float attenuation = 1.0 / pow(length(light_pos - fs_in.frag_pos), 2);
-    float brightness = 8.0;
 
     rgb *= ambient + (1.0 - shadow) * attenuation * brightness * (diffuse + specular);
 
