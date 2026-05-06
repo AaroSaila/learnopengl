@@ -3,7 +3,6 @@
 #include <cstdlib>
 #include <filesystem>
 #include <glm/geometric.hpp>
-#include <print>
 #include <string_view>
 
 #include <glm/glm.hpp>
@@ -24,6 +23,7 @@
 #include "error_handling.hpp"
 #include "quit.hpp"
 #include "trace.hpp"
+#include "Model.hpp"
 
 static int window_width { 800 };
 static int window_height { 600 };
@@ -285,54 +285,6 @@ int main(const int argc, const char** argv) {
     glViewport(0, 0, window_width, window_height);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-    constexpr std::size_t shadow_map_width { 1024 };
-    constexpr std::size_t shadow_map_height { 1024 };
-
-    unsigned int depth_cubemap { };
-    glGenTextures(1, &depth_cubemap);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, depth_cubemap);
-    for (unsigned int i { 0 }; i < 6; i++) {
-        glTexImage2D(
-            GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
-            0,
-            GL_DEPTH_COMPONENT,
-            shadow_map_width,
-            shadow_map_height,
-            0,
-            GL_DEPTH_COMPONENT,
-            GL_FLOAT,
-            nullptr);
-    }
-
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    // float border_color[] { 1.0f, 1.0f, 1.0f, 1.0f };
-    // glTexParameterfv(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BORDER_COLOR, border_color);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-    unsigned int depth_map_fbo { };
-    glGenFramebuffers(1, &depth_map_fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, depth_map_fbo);
-    glFramebufferTexture(
-        GL_FRAMEBUFFER,
-        GL_DEPTH_ATTACHMENT,
-        depth_cubemap,
-        0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-
-    {
-        const GLenum depth_map_fbo_status { glCheckFramebufferStatus(GL_FRAMEBUFFER) };
-        if (depth_map_fbo_status != GL_FRAMEBUFFER_COMPLETE) {
-            log_error(std::format("Depth map framebuffer was not complete: {}", depth_map_fbo_status).c_str());
-        }
-    }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-
     // 6 * (pos + normal + tangent + bitangent + tex_coords)
     std::array<float, 6 * (4 * 3 + 2)> square_vertices { };
     constexpr std::size_t square_stride { (4 * 3 + 2) * sizeof(float) };
@@ -473,8 +425,6 @@ int main(const int argc, const char** argv) {
         glBindVertexArray(0);
     }
 
-    std::println("square_vertices:\n{}", square_vertices);
-
     // clang-format off
     constexpr std::array cube_vertices {
         // back face
@@ -599,45 +549,17 @@ int main(const int argc, const char** argv) {
         texture_load(textures_path / "normal-maps" / "brickwall_normal.jpg", GL_RGB, GL_RGB)
     };
 
-    const unsigned int cube_texture {
-        texture_load(textures_path / "marble.jpg", GL_SRGB, GL_RGB)
-    };
-
-    glm::mat4 wall_model { 1.0f };
-    // wall_model = glm::translate(wall_model, glm::vec3 { 0.0f });
-    wall_model = glm::translate(wall_model, glm::vec3 { 0.0f, -1.0f, 0.0f });
-    wall_model = glm::rotate(wall_model, glm::radians(-90.0f), glm::vec3 { 1.0f, 0.0f, 0.0f });
+    Model backpack { (models_path / "backpack" / "backpack.obj").c_str() };
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_FRAMEBUFFER_SRGB);
-    glEnable(GL_CULL_FACE);
 
-    constexpr std::array<glm::vec3, 6> shadow_transform_look_dirs {
-        glm::vec3 { 1.0f, 0.0f, 0.0f },
-        glm::vec3 { -1.0f, 0.0f, 0.0f },
-        glm::vec3 { 0.0f, 1.0f, 0.0f },
-        glm::vec3 { 0.0f, -1.0f, 0.0f },
-        glm::vec3 { 0.0f, 0.0f, 1.0f },
-        glm::vec3 { 0.0f, 0.0f, -1.0f }
-    };
-    constexpr std::array<glm::vec3, 6> shadow_transform_ups {
-        glm::vec3 { 0.0f, -1.0f, 0.0f },
-        glm::vec3 { 0.0f, -1.0f, 0.0f },
-        glm::vec3 { 0.0f, 0.0f, 1.0f },
-        glm::vec3 { 0.0f, 0.0f, -1.0f },
-        glm::vec3 { 0.0f, -1.0f, 0.0f },
-        glm::vec3 { 0.0f, -1.0f, 0.0f }
-    };
+    glm::mat4 wall_model { 1.0f };
+    wall_model = glm::translate(wall_model, glm::vec3 { -1.5f, 0.0f, 0.0f });
+    wall_model = glm::rotate(wall_model, glm::radians(-45.0f), glm::normalize(glm::vec3 { 1.0f, 0.0f, 1.0f }));
 
-    constexpr float shadow_projection_near_plane { 0.5f };
-    constexpr float shadow_projection_far_plane { 25.0f };
-    const glm::mat4 shadow_projection {
-        glm::perspective(
-            glm::radians(90.0f),
-            (float) shadow_map_width / shadow_map_height,
-            shadow_projection_near_plane,
-            shadow_projection_far_plane)
-    };
+    glm::mat4 backpack_model { 1.0f };
+    backpack_model = glm::translate(backpack_model, glm::vec3 { 1.0f, 0.0f, 0.0f });
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -647,10 +569,10 @@ int main(const int argc, const char** argv) {
 
         process_input(window);
 
-        glm::vec3 light_pos { std::cos(current_time / 2), 0.0f, std::sin(current_time / 2) };
-        light_pos.x *= 2.0f;
-        light_pos.z *= 2.0f;
-        // glm::vec3 light_pos { 1.0f, 0.5f, 1.0f };
+        // glm::vec3 light_pos { std::cos(current_time / 2), 0.0f, std::sin(current_time / 2) };
+        // light_pos.x *= 2.5f;
+        // light_pos.z *= 2.5f;
+        glm::vec3 light_pos { 1.0f, 0.5f, 1.0f };
         glm::mat4 light_source_model { 1.0f };
         light_source_model = glm::translate(light_source_model, light_pos);
         light_source_model = glm::scale(light_source_model, glm::vec3 { 0.1f });
@@ -666,28 +588,6 @@ int main(const int argc, const char** argv) {
             glm::perspective(camera.get_fov_rad(), aspect_ratio, near_plane, far_plane)
         };
 
-        // Draw to depth map
-        glViewport(0, 0, shadow_map_width, shadow_map_height);
-        glBindFramebuffer(GL_FRAMEBUFFER, depth_map_fbo);
-        glClear(GL_DEPTH_BUFFER_BIT);
-
-        depth_cubemap_shader.use();
-        for (std::size_t i { 0 }; i < shadow_transform_look_dirs.size(); i++) {
-            depth_cubemap_shader.set_mat4(
-                std::format("shadow_matrices[{}]", i),
-                shadow_projection * glm::lookAt(light_pos, light_pos + shadow_transform_look_dirs[i], shadow_transform_ups[i]));
-        }
-        depth_cubemap_shader.set_vec3("light_pos", light_pos);
-        depth_cubemap_shader.set_float("far_plane", shadow_projection_far_plane);
-
-        depth_cubemap_shader.set_mat4("model", wall_model);
-        glBindVertexArray(square_vao);
-        glDrawArrays(GL_TRIANGLES, 0, square_vert_count);
-        glBindVertexArray(0);
-
-        glViewport(0, 0, window_width, window_height);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
         // Render scene
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -697,19 +597,14 @@ int main(const int argc, const char** argv) {
         shader.set_mat4("projection", projection);
         shader.set_vec3("light_pos", light_pos);
         shader.set_vec3("view_pos", camera.get_pos());
-        shader.set_float("far_plane", shadow_projection_far_plane);
-        shader.set_int("diffuse_texture", 0);
-        shader.set_int("depth_map", 1);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, depth_cubemap);
-        glActiveTexture(GL_TEXTURE0);
-        shader.set_int("normal_map", 2);
-
-        shader.set_float("shininess", 100.0f);
-        shader.set_mat4("model", wall_model);
+        shader.set_int("diffuse_map", 0);
         shader.set_bool("normal_map_disabled", normal_map_disabled);
+        shader.set_int("normal_map", 1);
+
+        shader.set_float("shininess", 101.0f);
+        shader.set_mat4("model", wall_model);
         glBindTexture(GL_TEXTURE_2D, brick_texture);
-        glActiveTexture(GL_TEXTURE2);
+        glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, brick_normal_map);
         glBindVertexArray(square_vao);
         glDrawArrays(GL_TRIANGLES, 0, square_vert_count);
@@ -718,6 +613,9 @@ int main(const int argc, const char** argv) {
         glBindTexture(GL_TEXTURE_2D, 0);
         glBindVertexArray(0);
 
+        shader.set_mat4("model", backpack_model);
+        backpack.draw(shader);
+
         single_color.use();
         single_color.set_mat4("model", light_source_model);
         single_color.set_mat4("view", view);
@@ -725,27 +623,6 @@ int main(const int argc, const char** argv) {
         glBindVertexArray(cube_vao);
         glDrawArrays(GL_TRIANGLES, 0, cube_vert_count);
         glBindVertexArray(0);
-
-        // Render depth map as a quad
-        // std::size_t depth_map_window_wize { window_width / 8u };
-        // if (depth_map_is_big) {
-        //     depth_map_window_wize = window_width / 2u;
-        // }
-        // glViewport(0, window_height - depth_map_window_wize, depth_map_window_wize, depth_map_window_wize);
-        // glDisable(GL_DEPTH_TEST);
-        //
-        // render_depth_shader.use();
-        // render_depth_shader.set_bool("is_perspective", true);
-        // render_depth_shader.set_float("near_plane", shadow_projection_near_plane);
-        // render_depth_shader.set_float("far_plane", shadow_projection_far_plane);
-        // render_depth_shader.set_int("depth_map", 0);
-        // glActiveTexture(GL_TEXTURE0);
-        // glBindTexture(GL_TEXTURE_2D, depth_cubemap);
-        // glBindVertexArray(square_vao);
-        // glDrawArrays(GL_TRIANGLES, 0, square_vert_count);
-        // glBindVertexArray(0);
-        //
-        // glEnable(GL_DEPTH_TEST);
 
         glfwSwapBuffers(window);
         glfwPollEvents();

@@ -1,4 +1,5 @@
 #include <string>
+#include <string_view>
 
 #include "Mesh.hpp"
 
@@ -21,22 +22,18 @@ Mesh::Mesh(
 // public
 
 void Mesh::draw(Shader& shader) const {
-    (void)shader;
-    unsigned int diffuse_nr { 0 };
-    unsigned int specular_nr { 0 };
+    (void) shader;
     for (std::size_t i { 0 }; i < this->textures.size(); i++) {
         glActiveTexture(GL_TEXTURE0 + i);
-        std::string number {};
-        const std::string name { this->textures[i].type };
+        const std::string_view name { this->textures[i].type };
         if (name == "texture_diffuse") {
-            number = std::to_string(diffuse_nr);
-            diffuse_nr++;
-        } else if (name == "texture_specular") {
-            number = std::to_string(specular_nr);
-            specular_nr++;
+            shader.set_int("diffuse_map", i);
+        } else if (name == "texture_normal") {
+            shader.set_int("normal_map", i);
+        } else {
+            continue;
         }
 
-        shader.set_int(std::format("material.{}s[{}]", name, number).c_str(), i);
         glBindTexture(GL_TEXTURE_2D, this->textures[i].id);
     }
 
@@ -78,7 +75,7 @@ void Mesh::setup_mesh() {
         GL_FLOAT,
         GL_FALSE,
         stride,
-        (void*)0);
+        (void*) 0);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(
         1,
@@ -86,7 +83,7 @@ void Mesh::setup_mesh() {
         GL_FLOAT,
         GL_FALSE,
         stride,
-        (void*)offsetof(Vertex, normal));
+        (void*) offsetof(Vertex, normal));
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(
         2,
@@ -94,7 +91,23 @@ void Mesh::setup_mesh() {
         GL_FLOAT,
         GL_FALSE,
         stride,
-        (void*)offsetof(Vertex, tex_coords));
+        (void*) offsetof(Vertex, tex_coords));
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(
+        3,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+        stride,
+        (void*) offsetof(Vertex, tangent));
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(
+        4,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+        stride,
+        (void*) offsetof(Vertex, bitangent));
 
     glBindVertexArray(0);
 }

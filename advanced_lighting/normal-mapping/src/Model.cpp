@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <print>
 
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
@@ -43,14 +42,16 @@ void Model::load_model(std::string path) {
     Assimp::Importer importer { };
     const aiScene* scene { importer.ReadFile(
         path.c_str(),
-        aiProcess_Triangulate | aiProcess_FlipUVs) };
+        aiProcess_Triangulate
+            | aiProcess_FlipUVs
+            | aiProcess_CalcTangentSpace) };
 
     if (
         scene == nullptr
         || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE
         || scene->mRootNode == nullptr) {
 
-        std::println(stderr, "Failed to load model. Assimp error: {}", importer.GetErrorString());
+        log_error(std::format("Failed to load model. Assimp error: {}", importer.GetErrorString()).c_str());
         return;
     }
 
@@ -96,12 +97,28 @@ Mesh Model::process_mesh(aiMesh* mesh, const aiScene* scene) {
             vertex.tex_coords.y = 0.0f;
         }
 
+        if (mesh->mTangents != nullptr) {
+            vertex.tangent = glm::vec3 {
+                mesh->mTangents[i].x,
+                mesh->mTangents[i].y,
+                mesh->mTangents[i].z
+            };
+        }
+
+        if (mesh->mBitangents != nullptr) {
+            vertex.bitangent = glm::vec3 {
+                mesh->mBitangents[i].x,
+                mesh->mBitangents[i].y,
+                mesh->mBitangents[i].z
+            };
+        }
+
         vertices.emplace_back(vertex);
     }
 
     // indices
     for (std::size_t i { 0 }; i < mesh->mNumFaces; i++) {
-        aiFace face { mesh->mFaces[i] };
+        const aiFace& face { mesh->mFaces[i] };
         for (std::size_t j { 0 }; j < face.mNumIndices; j++) {
             indices.emplace_back(face.mIndices[j]);
         }
@@ -121,6 +138,12 @@ Mesh Model::process_mesh(aiMesh* mesh, const aiScene* scene) {
         aiTextureType_SPECULAR,
         "texture_specular") };
     textures.insert(textures.end(), specular_maps.begin(), specular_maps.end());
+
+    const std::vector<Texture> normal_maps { this->load_material_textures(
+        material,
+        aiTextureType_HEIGHT,
+        "texture_normal") };
+    textures.insert(textures.end(), normal_maps.begin(), normal_maps.end());
 
     return Mesh { vertices, indices, textures };
 }
