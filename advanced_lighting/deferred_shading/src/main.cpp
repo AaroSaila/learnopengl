@@ -5,7 +5,6 @@
 #include <glm/geometric.hpp>
 #include <print>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 
 #include <glm/glm.hpp>
@@ -22,6 +21,7 @@
 #include <GLFW/glfw3.h>
 
 #include "Camera.hpp"
+#include "Model.hpp"
 #include "Shader.hpp"
 #include "error_handling.hpp"
 #include "letters.hpp"
@@ -36,7 +36,7 @@ static constexpr struct {
     float speed;
     float mouse_sensitivity;
 } camera_defaults {
-    .pos = glm::vec3 { 0.0f, 0.0f, 5.0f },
+    .pos = glm::vec3 { 0.0f, 3.0f, 0.0f },
     .fov_deg = 70.0f,
     .speed = 2.5f,
     .mouse_sensitivity = 0.05f
@@ -65,7 +65,6 @@ static bool first_mouse_input { true };
 static bool hdr_disabled { false };
 static float exposure { 0.5f };
 static bool render_gbuffer { false };
-static float bloom_threshold { 1.0f };
 
 std::filesystem::path textures_path { };
 std::filesystem::path shaders_path { };
@@ -183,8 +182,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         }
         break;
 
-    // Toggle bloom
-    case GLFW_KEY_B:
+    // Toggle deferred
+    case GLFW_KEY_G:
         switch (action) {
         case GLFW_PRESS:
             render_gbuffer = !render_gbuffer;
@@ -305,6 +304,8 @@ int main(const int argc, const char** argv) {
     std::println("textures_path: {}\n", textures_path.c_str());
     std::println("shaders_path : {}\n", shaders_path.c_str());
     std::println("models_path  : {}\n", models_path.c_str());
+
+    stbi_set_flip_vertically_on_load(true);
 
     // GLFW
     if (glfwInit() != GLFW_TRUE) {
@@ -481,100 +482,125 @@ int main(const int argc, const char** argv) {
 
     glBindVertexArray(0);
 
-    unsigned int depth_buf { };
-    glGenRenderbuffers(1, &depth_buf);
-    glBindRenderbuffer(GL_RENDERBUFFER, depth_buf);
-    glRenderbufferStorage(
-        GL_RENDERBUFFER,
-        GL_DEPTH_COMPONENT,
-        window_width,
-        window_height);
+    // Framebuffers
 
-    unsigned int hdr_fbo { };
-    glGenFramebuffers(1, &hdr_fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, hdr_fbo);
+    unsigned int g_buffer { };
+    glGenFramebuffers(1, &g_buffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, g_buffer);
+    unsigned int g_position { };
+    unsigned int g_normal { };
+    unsigned int g_color_specular { };
+
+    // position buffer
+    glGenTextures(1, &g_position);
+    glBindTexture(GL_TEXTURE_2D, g_position);
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA16F,
+        window_width,
+        window_height,
+        0,
+        GL_RGBA,
+        GL_FLOAT,
+        nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(
+        GL_FRAMEBUFFER,
+        GL_COLOR_ATTACHMENT0,
+        GL_TEXTURE_2D,
+        g_position,
+        0);
+
+    // normal color buffer
+    glGenTextures(1, &g_normal);
+    glBindTexture(GL_TEXTURE_2D, g_normal);
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA16F,
+        window_width,
+        window_height,
+        0,
+        GL_RGBA,
+        GL_FLOAT,
+        nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(
+        GL_FRAMEBUFFER,
+        GL_COLOR_ATTACHMENT1,
+        GL_TEXTURE_2D,
+        g_normal,
+        0);
+
+    // color + specular buffer
+    glGenTextures(1, &g_color_specular);
+    glBindTexture(GL_TEXTURE_2D, g_color_specular);
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA,
+        window_width,
+        window_height,
+        0,
+        GL_RGBA,
+        GL_FLOAT,
+        nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(
+        GL_FRAMEBUFFER,
+        GL_COLOR_ATTACHMENT2,
+        GL_TEXTURE_2D,
+        g_color_specular,
+        0);
+
+    unsigned int g_depth_buf { };
+    glGenRenderbuffers(1, &g_depth_buf);
+    glBindRenderbuffer(GL_RENDERBUFFER, g_depth_buf);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, window_width, window_height);
     glFramebufferRenderbuffer(
         GL_FRAMEBUFFER,
         GL_DEPTH_ATTACHMENT,
         GL_RENDERBUFFER,
-        depth_buf);
+        g_depth_buf);
 
-    std::array<unsigned int, 2> hdr_colors_bufs { };
-    glGenTextures(2, hdr_colors_bufs.data());
-    for (std::size_t i { 0 }; i < hdr_colors_bufs.size(); i++) {
-        glBindTexture(GL_TEXTURE_2D, hdr_colors_bufs.at(i));
-        glTexImage2D(
-            GL_TEXTURE_2D,
-            0,
-            GL_RGBA16F,
-            window_width,
-            window_height,
-            0,
-            GL_RGBA,
-            GL_FLOAT,
-            nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    check_framebuffer_complete(GL_FRAMEBUFFER);
 
-        glFramebufferTexture2D(
-            GL_FRAMEBUFFER,
-            GL_COLOR_ATTACHMENT0 + i,
-            GL_TEXTURE_2D,
-            hdr_colors_bufs.at(i),
-            0);
-    }
-
-    {
-        constexpr unsigned int attachments[2] { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
-        glDrawBuffers(2, attachments);
-    }
-
-    std::array<unsigned int, 2> ping_pong_fbos { };
-    std::array<unsigned int, 2> ping_pong_bufs { };
-    glGenFramebuffers(2, ping_pong_fbos.data());
-    glGenTextures(2, ping_pong_bufs.data());
-    for (std::size_t i { 0 }; i < ping_pong_fbos.size(); i++) {
-        glBindFramebuffer(GL_FRAMEBUFFER, ping_pong_fbos.at(i));
-        glBindTexture(GL_TEXTURE_2D, ping_pong_bufs.at(i));
-        glTexImage2D(
-            GL_TEXTURE_2D,
-            0,
-            GL_RGBA16F,
-            window_width,
-            window_height,
-            0,
-            GL_RGBA,
-            GL_FLOAT,
-            nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glFramebufferTexture2D(
-            GL_FRAMEBUFFER,
-            GL_COLOR_ATTACHMENT0,
-            GL_TEXTURE_2D,
-            ping_pong_bufs.at(i),
-            0);
-    }
+    constexpr unsigned int attachments[3] {
+        GL_COLOR_ATTACHMENT0,
+        GL_COLOR_ATTACHMENT1,
+        GL_COLOR_ATTACHMENT2
+    };
+    glDrawBuffers(3, attachments);
+    // glDrawBuffers(
+    //     3,
+    //     (const unsigned int[]) {
+    //         GL_COLOR_ATTACHMENT0,
+    //         GL_COLOR_ATTACHMENT1,
+    //         GL_COLOR_ATTACHMENT2 });
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
+    // Shaders
+
     Shader shader {
         shaders_path / "shader.vert",
+        shaders_path / "geometry_pass.frag"
+    };
+
+    Shader gbuf_render_shader {
+        shaders_path / "2d.vert",
+        shaders_path / "gbuf_render.frag"
+    };
+
+    Shader lighting_pass_shader {
+        shaders_path / "2d.vert",
         shaders_path / "shader.frag"
-    };
-
-    Shader post_process_shader {
-        shaders_path / "pos_tex_passthrough.vert",
-        shaders_path / "post_process.frag",
-    };
-
-    Shader blur_shader {
-        shaders_path / "pos_tex_passthrough.vert",
-        shaders_path / "gaussian_blur.frag"
     };
 
     Shader letter_shader {
@@ -582,35 +608,89 @@ int main(const int argc, const char** argv) {
         shaders_path / "letter.frag"
     };
 
-    Shader single_color_shader {
-        shaders_path / "shader.vert",
-        shaders_path / "single_color.frag"
-    };
-
-    const unsigned int wood_texture {
-        texture_load(textures_path / "wood.png", GL_SRGB, GL_RGB)
-    };
-
     glEnable(GL_DEPTH_TEST);
     // glEnable(GL_FRAMEBUFFER_SRGB);
 
-    glm::mat4 tunnel_model { 1.0f };
-    tunnel_model = glm::translate(tunnel_model, glm::vec3 { 0.0f, 0.0f, 25.0f });
-    tunnel_model = glm::scale(tunnel_model, glm::vec3 { 2.5f, 2.5f, 27.5f });
+    Model backpack { models_path / "backpack" / "backpack.obj" };
+    std::array<glm::mat4, 9> backpack_models;
+    std::array<glm::vec3, 27> light_positions;
+    {
+        constexpr float interval { 3.0f };
+        constexpr glm::vec3 backpack_first_pos { -interval, 0.0f, -interval * 3 };
+        glm::vec3 backpack_pos { backpack_first_pos };
+        constexpr std::size_t cols { 3 };
+        std::size_t lights_i { 0 };
+        std::size_t col { 0 };
+        for (std::size_t i { 0 }; i < backpack_models.size(); i++) {
+            glm::mat4& model { backpack_models.at(i) };
+            model = glm::mat4 { 1.0f };
+            model = glm::translate(model, backpack_pos);
 
-    constexpr std::array light_positions {
-        glm::vec3 { 0.0f, 0.0f, 49.5f },
-        glm::vec3 { -1.4f, -1.9f, 9.0f },
-        glm::vec3 { 0.0f, -1.8f, 4.0f },
-        glm::vec3 { 0.8f, -1.7f, 6.0f },
+            light_positions.at(lights_i) = glm::vec3 {
+                backpack_pos.x - interval / 4.0f,
+                backpack_pos.y,
+                backpack_pos.z + 0.2f
+            };
+            lights_i++;
+            light_positions.at(lights_i) = glm::vec3 {
+                backpack_pos.x,
+                backpack_pos.y,
+                backpack_pos.z + 0.2f
+            };
+            lights_i++;
+            light_positions.at(lights_i) = glm::vec3 {
+                backpack_pos.x + interval / 4.0f,
+                backpack_pos.y,
+                backpack_pos.z + 0.2f
+            };
+            lights_i++;
+
+            backpack_pos.x += interval;
+
+            col++;
+            if (col == cols) {
+                col = 0;
+                backpack_pos.x = backpack_first_pos.x;
+                backpack_pos.z += interval;
+            }
+        }
+    }
+
+    std::array light_colors {
+        glm::vec3 { 0.14680841448810344f, 0.7927620690959628f, 0.43387394219045494f },
+        glm::vec3 { 0.5121064609490729f, 0.422258720646152f, 0.6154157898929853f },
+        glm::vec3 { 0.45275982402137416f, 0.5823967913873292f, 0.9210095731122273f },
+        glm::vec3 { 0.8617206453123065f, 0.8407118348383733f, 0.888125971981454f },
+        glm::vec3 { 0.3719369360721818f, 0.10378160428376282f, 0.773861638704703f },
+        glm::vec3 { 0.5443714756419242f, 0.3305880514346322f, 0.7592962925115803f },
+        glm::vec3 { 0.04236804078824452f, 0.03086901661237529f, 0.02009803159460155f },
+        glm::vec3 { 0.5254274767877942f, 0.11205489323103746f, 0.054329254774221125f },
+        glm::vec3 { 0.371304989571143f, 0.4360983707479662f, 0.5990008877355332f },
+        glm::vec3 { 0.13723686305218874f, 0.09309352372970925f, 0.1892208961672044f },
+        glm::vec3 { 0.4329456934942252f, 0.16342239082238874f, 0.5389717810727881f },
+        glm::vec3 { 0.836010285275419f, 0.07331483954170859f, 0.6260238814675185f },
+        glm::vec3 { 0.5325417543652557f, 0.7899560439202089f, 0.6465373017823908f },
+        glm::vec3 { 0.44731125118968806f, 0.8645432597973155f, 0.7276502137641154f },
+        glm::vec3 { 0.07143468202155512f, 0.6876677098292266f, 0.6526108984725857f },
+        glm::vec3 { 0.963727160682279f, 0.48137672629926076f, 0.48118372471315307f },
+        glm::vec3 { 0.27136616746141495f, 0.7969017097515639f, 0.9174179780825197f },
+        glm::vec3 { 0.548747586129664f, 0.8288134799319541f, 0.35412761725125674f },
+        glm::vec3 { 0.011353633888020576f, 0.49544076930941383f, 0.24532339983229368f },
+        glm::vec3 { 0.9254181789513455f, 0.01710003319980402f, 0.4322962304083038f },
+        glm::vec3 { 0.29120855366748155f, 0.43839575686439347f, 0.8079196390564752f },
+        glm::vec3 { 0.7117690692664415f, 0.12586048632301805f, 0.049189743213985504f },
+        glm::vec3 { 0.9657950967001594f, 0.5977262921471352f, 0.5142211581809027f },
+        glm::vec3 { 0.3972463187081251f, 0.6680036032563686f, 0.8557785811999891f },
+        glm::vec3 { 0.7193172231155556f, 0.013811186560385935f, 0.8412282539271051f },
+        glm::vec3 { 0.8944901144207095f, 0.1441003936596208f, 0.46440379911448415f },
+        glm::vec3 { 0.8563095830082132f, 0.10937746123217373f, 0.13933580566305437f },
     };
 
-    constexpr std::array light_colors {
-        glm::vec3 { 200.0f },
-        glm::vec3 { 5.0f, 0.0f, 0.0f },
-        glm::vec3 { 0.0f, 0.0f, 15.0f },
-        glm::vec3 { 0.0f, 10.0f, 0.0f },
-    };
+    static_assert(light_positions.size() == light_colors.size());
+
+    for (auto& color : light_colors) {
+        color /= 1.0f;
+    }
 
     auto render_quad { [square_vao]() {
         glBindVertexArray(square_vao);
@@ -640,91 +720,101 @@ int main(const int argc, const char** argv) {
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        // Geometry pass
         // clang-format off
-        glBindFramebuffer(GL_FRAMEBUFFER, hdr_fbo);
-
+        glBindFramebuffer(GL_FRAMEBUFFER, g_buffer);
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
             shader.use();
             shader.set_mat4("view", view);
             shader.set_mat4("projection", projection);
-            shader.set_bool("invert_normals", true);
 
-            shader.set_mat4("model", tunnel_model);
-            for (std::size_t i { 0 }; i < light_positions.size(); i++) {
-                shader.set_vec3("point_lights["+std::to_string(i)+"].pos", light_positions.at(i));
-                shader.set_vec3("point_lights["+std::to_string(i)+"].color", light_colors.at(i));
+            for (const auto& model : backpack_models) {
+                shader.set_mat4("model", model);
+                backpack.draw(shader);
             }
-            shader.set_float("shininess", 10.0f);
-            shader.set_vec3("view_pos", camera.get_pos());
-
-            glBindVertexArray(cube_vao);
-                glBindTexture(GL_TEXTURE_2D, wood_texture);
-                glDrawArrays(GL_TRIANGLES, 0, cube_vert_count);
-
-                single_color_shader.use();
-                single_color_shader.set_mat4("view", view);
-                single_color_shader.set_mat4("projection", projection);
-                for (std::size_t i { 1 }; i < light_positions.size(); i++) {
-                    glm::mat4 model { 1.0f };
-                    model = glm::translate(model, light_positions.at(i));
-                    model = glm::scale(model, glm::vec3{0.5f});
-                    single_color_shader.set_mat4("model", model);
-                    single_color_shader.set_vec3("color", light_colors.at(i));
-                    glDrawArrays(GL_TRIANGLES, 0, cube_vert_count);
-                }
-            glBindVertexArray(0);
-
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        // clang-format on
 
-        unsigned int blur_buf {};
-        {
-            bool horizontal { true };
-            bool first_iteration { true };
-            constexpr int amount { 10 };
+        if (render_gbuffer) {
+            // Render gbuffer
+            gbuf_render_shader.use();
+            gbuf_render_shader.set_mat4("model", glm::mat4 { 1.0f });
+            gbuf_render_shader.set_int("diffuse_map", 0);
+            glActiveTexture(GL_TEXTURE0);
 
-            blur_shader.use();
-            for (int i { 0 }; i < amount; i++) {
-                glBindFramebuffer(GL_FRAMEBUFFER, ping_pong_fbos.at(horizontal));
-                blur_shader.set_int("horizontal", horizontal);
-                glBindTexture(
-                    GL_TEXTURE_2D,
-                    first_iteration
-                        ? hdr_colors_bufs.at(1)
-                        : ping_pong_bufs.at(!horizontal)
-                );
-                render_quad();
+            // top-left g_position
+            gbuf_render_shader.set_bool("color", false);
+            gbuf_render_shader.set_bool("specular", false);
+            glBindTexture(GL_TEXTURE_2D, g_position);
 
-                horizontal = !horizontal;
-                if (first_iteration) {
-                    first_iteration = false;
-                }
+            glm::mat4 model { 1.0f };
+            model = glm::scale(model, glm::vec3 { 0.5f });
+            model = glm::translate(model, glm::vec3 { -1.0f, 1.0f, 0.0f });
+            gbuf_render_shader.set_mat4("model", model);
+            render_quad();
+
+            // top-right g_normal
+            glBindTexture(GL_TEXTURE_2D, g_normal);
+            model = { 1.0f };
+            model = glm::scale(model, glm::vec3 { 0.5f });
+            model = glm::translate(model, glm::vec3 { 1.0f, 1.0f, 0.0f });
+            gbuf_render_shader.set_mat4("model", model);
+            render_quad();
+
+            // bottom-left g_color_specular color
+            gbuf_render_shader.set_bool("color", true);
+            glBindTexture(GL_TEXTURE_2D, g_color_specular);
+
+            model = { 1.0f };
+            model = glm::scale(model, glm::vec3 { 0.5f });
+            model = glm::translate(model, glm::vec3 { -1.0f, -1.0f, 0.0f });
+            gbuf_render_shader.set_mat4("model", model);
+            render_quad();
+
+            // bottom-right g_color_specular specular
+            gbuf_render_shader.set_bool("color", false);
+            gbuf_render_shader.set_bool("specular", true);
+
+            model = { 1.0f };
+            model = glm::scale(model, glm::vec3 { 0.5f });
+            model = glm::translate(model, glm::vec3 { 1.0f, -1.0f, 0.0f });
+            gbuf_render_shader.set_mat4("model", model);
+            render_quad();
+        } else {
+            // Lighting pass
+            lighting_pass_shader.use();
+            lighting_pass_shader.set_mat4("model", glm::mat4 { 1.0f });
+            lighting_pass_shader.set_vec3("view_pos", camera.get_pos());
+            lighting_pass_shader.set_bool("hdr_disabled", hdr_disabled);
+            lighting_pass_shader.set_float("exposure", exposure);
+            lighting_pass_shader.set_int("g_position", 0);
+            lighting_pass_shader.set_int("g_normal", 1);
+            lighting_pass_shader.set_int("g_color_specular", 2);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, g_position);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, g_normal);
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, g_color_specular);
+
+            for (std::size_t i { 0 }; i < light_positions.size(); i++) {
+                const std::string point_light { std::format("point_lights[{}]", i) };
+                lighting_pass_shader.set_vec3(point_light + ".pos", light_positions.at(i));
+                lighting_pass_shader.set_vec3(point_light + ".color", light_colors.at(i));
             }
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-            blur_buf = ping_pong_bufs.at(!horizontal);
+            render_quad();
         }
 
+        // clang-format off
         glDisable(GL_DEPTH_TEST);
-            post_process_shader.use();
-            post_process_shader.set_bool("hdr_disabled", hdr_disabled);
-            post_process_shader.set_bool("bloom_disabled", render_gbuffer);
-            post_process_shader.set_float("exposure", exposure);
-            post_process_shader.set_int("hdr_buf", 0);
-            post_process_shader.set_int("bloom_buf", 1);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, hdr_colors_bufs.at(0));
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, blur_buf);
-            render_quad();
-            glActiveTexture(GL_TEXTURE0);
-
             draw_letters_in_corner_red_green(
-                (const Letters[]) { Letters::H, Letters::B },
+                (const Letters[]) { Letters::G, Letters::H },
                 2,
                 (const glm::vec3[]) { glm::vec3 { 0.0f } },
                 1,
-                (const bool[]) { !hdr_disabled, !render_gbuffer },
+                (const bool[]) { render_gbuffer, !hdr_disabled && !render_gbuffer },
                 Corners::TOPLEFT,
                 glm::vec3 { 0.5f },
                 letter_shader);
