@@ -569,18 +569,18 @@ int main(const int argc, const char** argv) {
 
     check_framebuffer_complete(GL_FRAMEBUFFER);
 
-    constexpr unsigned int attachments[3] {
-        GL_COLOR_ATTACHMENT0,
-        GL_COLOR_ATTACHMENT1,
-        GL_COLOR_ATTACHMENT2
-    };
-    glDrawBuffers(3, attachments);
-    // glDrawBuffers(
-    //     3,
-    //     (const unsigned int[]) {
-    //         GL_COLOR_ATTACHMENT0,
-    //         GL_COLOR_ATTACHMENT1,
-    //         GL_COLOR_ATTACHMENT2 });
+    // constexpr unsigned int attachments[3] {
+    //     GL_COLOR_ATTACHMENT0,
+    //     GL_COLOR_ATTACHMENT1,
+    //     GL_COLOR_ATTACHMENT2
+    // };
+    // glDrawBuffers(3, attachments);
+    glDrawBuffers(
+        3,
+        (const unsigned int[]) {
+            GL_COLOR_ATTACHMENT0,
+            GL_COLOR_ATTACHMENT1,
+            GL_COLOR_ATTACHMENT2 });
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -603,13 +603,15 @@ int main(const int argc, const char** argv) {
         shaders_path / "shader.frag"
     };
 
+    Shader single_color_shader {
+        shaders_path / "shader.vert",
+        shaders_path / "single_color.frag"
+    };
+
     Shader letter_shader {
         shaders_path / "letter.vert",
         shaders_path / "letter.frag"
     };
-
-    glEnable(GL_DEPTH_TEST);
-    // glEnable(GL_FRAMEBUFFER_SRGB);
 
     Model backpack { models_path / "backpack" / "backpack.obj" };
     std::array<glm::mat4, 9> backpack_models;
@@ -696,6 +698,9 @@ int main(const int argc, const char** argv) {
         glBindVertexArray(square_vao);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, square_vert_count);
     } };
+
+    glEnable(GL_DEPTH_TEST);
+    // glEnable(GL_FRAMEBUFFER_SRGB);
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -805,6 +810,40 @@ int main(const int argc, const char** argv) {
             }
 
             render_quad();
+
+            // render lights
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, g_buffer);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            glBlitFramebuffer(
+                0,
+                0,
+                window_width,
+                window_height,
+                0,
+                0,
+                window_width,
+                window_height,
+                GL_DEPTH_BUFFER_BIT,
+                GL_NEAREST);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+            single_color_shader.use();
+            single_color_shader.set_mat4("view", view);
+            single_color_shader.set_mat4("projection", projection);
+            // clang-format off
+            glBindVertexArray(cube_vao);
+                for (std::size_t i { 0 }; i < light_positions.size(); i++) {
+                    single_color_shader.set_vec3("color", light_colors.at(i));
+
+                    glm::mat4 model { 1.0f };
+                    model = glm::translate(model, light_positions.at(i));
+                    model = glm::scale(model, glm::vec3 { 0.10f });
+                    single_color_shader.set_mat4("model", model);
+
+                    glDrawArrays(GL_TRIANGLES, 0, cube_vert_count);
+                }
+            glBindVertexArray(0);
+            // clang-format on
         }
 
         // clang-format off
