@@ -65,6 +65,9 @@ static bool first_mouse_input { true };
 static bool hdr_disabled { false };
 static float exposure { 0.5f };
 static bool render_gbuffer { false };
+static constexpr float att_c { 1.0 };
+static constexpr float att_linear { 0.7 };
+static constexpr float att_quadratic { 1.8 };
 
 std::filesystem::path textures_path { };
 std::filesystem::path shaders_path { };
@@ -613,52 +616,7 @@ int main(const int argc, const char** argv) {
         shaders_path / "letter.frag"
     };
 
-    Model backpack { models_path / "backpack" / "backpack.obj" };
-    std::array<glm::mat4, 9> backpack_models;
-    std::array<glm::vec3, 27> light_positions;
-    {
-        constexpr float interval { 3.0f };
-        constexpr glm::vec3 backpack_first_pos { -interval, 0.0f, -interval * 3 };
-        glm::vec3 backpack_pos { backpack_first_pos };
-        constexpr std::size_t cols { 3 };
-        std::size_t lights_i { 0 };
-        std::size_t col { 0 };
-        for (std::size_t i { 0 }; i < backpack_models.size(); i++) {
-            glm::mat4& model { backpack_models.at(i) };
-            model = glm::mat4 { 1.0f };
-            model = glm::translate(model, backpack_pos);
-
-            light_positions.at(lights_i) = glm::vec3 {
-                backpack_pos.x - interval / 4.0f,
-                backpack_pos.y,
-                backpack_pos.z + 0.2f
-            };
-            lights_i++;
-            light_positions.at(lights_i) = glm::vec3 {
-                backpack_pos.x,
-                backpack_pos.y,
-                backpack_pos.z + 0.2f
-            };
-            lights_i++;
-            light_positions.at(lights_i) = glm::vec3 {
-                backpack_pos.x + interval / 4.0f,
-                backpack_pos.y,
-                backpack_pos.z + 0.2f
-            };
-            lights_i++;
-
-            backpack_pos.x += interval;
-
-            col++;
-            if (col == cols) {
-                col = 0;
-                backpack_pos.x = backpack_first_pos.x;
-                backpack_pos.z += interval;
-            }
-        }
-    }
-
-    std::array light_colors {
+    std::array<glm::vec3, 27> light_colors {
         glm::vec3 { 0.14680841448810344f, 0.7927620690959628f, 0.43387394219045494f },
         glm::vec3 { 0.5121064609490729f, 0.422258720646152f, 0.6154157898929853f },
         glm::vec3 { 0.45275982402137416f, 0.5823967913873292f, 0.9210095731122273f },
@@ -687,8 +645,60 @@ int main(const int argc, const char** argv) {
         glm::vec3 { 0.8944901144207095f, 0.1441003936596208f, 0.46440379911448415f },
         glm::vec3 { 0.8563095830082132f, 0.10937746123217373f, 0.13933580566305437f },
     };
-
+    std::array<glm::vec3, 27> light_positions;
+    std::array<float, 27> light_radiuses;
     static_assert(light_positions.size() == light_colors.size());
+    static_assert(light_positions.size() == light_radiuses.size());
+
+    Model backpack { models_path / "backpack" / "backpack.obj" };
+    std::array<glm::mat4, 9> backpack_models;
+    {
+        constexpr float interval { 3.0f };
+        constexpr glm::vec3 backpack_first_pos { -interval, 0.0f, -interval * 3 };
+        glm::vec3 backpack_pos { backpack_first_pos };
+        constexpr std::size_t cols { 3 };
+        std::size_t i { 0 };
+        std::size_t lights_i { 0 };
+        std::size_t col { 0 };
+        auto add_light { [&light_positions, &light_colors, &light_radiuses, &i, &lights_i](const glm::vec3& pos) {
+            light_positions.at(lights_i) = pos;
+            const glm::vec3& color { light_colors.at(i) };
+            const float light_max { std::fmaxf(std::fmaxf(color.r, color.g), color.b) };
+            const float radius {
+                (-att_linear + std::sqrtf(att_linear * att_linear - 4 * att_quadratic * (att_c - (256.0f / 5.0f) * light_max)))
+                / (2 * att_quadratic)
+            };
+            light_radiuses.at(lights_i) = radius;
+            lights_i++;
+        } };
+        for (std::size_t i { 0 }; i < backpack_models.size(); i++) {
+            glm::mat4& model { backpack_models.at(i) };
+            model = glm::mat4 { 1.0f };
+            model = glm::translate(model, backpack_pos);
+
+            add_light(glm::vec3 {
+                backpack_pos.x - interval / 4.0f,
+                backpack_pos.y,
+                backpack_pos.z + 0.2f });
+            add_light(glm::vec3 {
+                backpack_pos.x,
+                backpack_pos.y,
+                backpack_pos.z + 0.2f });
+            add_light(glm::vec3 {
+                backpack_pos.x + interval / 4.0f,
+                backpack_pos.y,
+                backpack_pos.z + 0.2f });
+
+            backpack_pos.x += interval;
+
+            col++;
+            if (col == cols) {
+                col = 0;
+                backpack_pos.x = backpack_first_pos.x;
+                backpack_pos.z += interval;
+            }
+        }
+    }
 
     for (auto& color : light_colors) {
         color /= 1.0f;
@@ -793,6 +803,9 @@ int main(const int argc, const char** argv) {
             lighting_pass_shader.set_vec3("view_pos", camera.get_pos());
             lighting_pass_shader.set_bool("hdr_disabled", hdr_disabled);
             lighting_pass_shader.set_float("exposure", exposure);
+            lighting_pass_shader.set_float("att_c", att_c);
+            lighting_pass_shader.set_float("att_linear", att_linear);
+            lighting_pass_shader.set_float("att_quadratic", att_quadratic);
             lighting_pass_shader.set_int("g_position", 0);
             lighting_pass_shader.set_int("g_normal", 1);
             lighting_pass_shader.set_int("g_color_specular", 2);
@@ -807,6 +820,7 @@ int main(const int argc, const char** argv) {
                 const std::string point_light { std::format("point_lights[{}]", i) };
                 lighting_pass_shader.set_vec3(point_light + ".pos", light_positions.at(i));
                 lighting_pass_shader.set_vec3(point_light + ".color", light_colors.at(i));
+                lighting_pass_shader.set_float(point_light + ".radius", light_radiuses.at(i));
             }
 
             render_quad();

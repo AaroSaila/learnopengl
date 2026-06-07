@@ -3,6 +3,7 @@
 struct PointLight {
     vec3 pos;
     vec3 color;
+    float radius;
 };
 
 uniform sampler2D g_position;
@@ -11,6 +12,9 @@ uniform sampler2D g_color_specular;
 uniform vec3 view_pos;
 uniform float exposure;
 uniform bool hdr_disabled;
+uniform float att_c;
+uniform float att_linear;
+uniform float att_quadratic;
 
 #define LIGHTS_COUNT 27
 uniform PointLight point_lights[LIGHTS_COUNT];
@@ -25,30 +29,35 @@ void main() {
     vec3 rgb = texture(g_color_specular, vo_tex_coords).rgb;
     float specular_material = texture(g_color_specular, vo_tex_coords).a;
 
-    float ambient_mag = 0.0;
-    float diffuse_mag = 0.3;
+    float ambient_mag = 0.001;
+    float diffuse_mag = 1.0;
     float specular_mag = 1.0;
 
     vec3 view_dir = normalize(view_pos - frag_pos);
 
     vec3 lighting = vec3(0.0);
+
+    // Ambient
+    vec3 ambient = vec3(1.0) * ambient_mag;
+
     for (int i = 0; i < LIGHTS_COUNT; i++) {
-        // Ambient
-        vec3 ambient = point_lights[i].color * ambient_mag;
+        float distance = length(point_lights[i].pos - frag_pos);
+        if (distance < point_lights[i].radius) {
+            // Diffuse
+            vec3 light_dir = normalize(point_lights[i].pos - frag_pos);
+            float diff_strength = max(dot(light_dir, normal), 0.0);
+            vec3 diffuse = diff_strength * point_lights[i].color * diffuse_mag;
 
-        // Diffuse
-        vec3 light_dir = normalize(point_lights[i].pos - frag_pos);
-        float diff_strength = max(dot(light_dir, normal), 0.0);
-        vec3 diffuse = diff_strength * point_lights[i].color * diffuse_mag;
+            // Specular
+            vec3 halfway = normalize(view_dir + light_dir);
+            float spec_mag = pow(max(dot(normal, halfway), 0.0), 16.0);
+            vec3 specular = spec_mag * point_lights[i].color * specular_mag * specular_material;
 
-        // Specular
-        vec3 halfway = normalize(view_dir + light_dir);
-        float spec_mag = pow(max(dot(normal, halfway), 0.0), 16.0);
-        vec3 specular = spec_mag * point_lights[i].color * specular_mag * specular_material;
+            // float attenuation = 1.0 / pow(length(point_lights[i].pos - frag_pos), 2);
+            float attenuation = 1.0 / (att_c + att_linear * distance + att_quadratic * (distance * distance));
 
-        float attenuation = 1.0 / pow(length(point_lights[i].pos - frag_pos), 2);
-
-        lighting += ambient + (attenuation * (diffuse + specular));
+            lighting += ambient + (attenuation * (diffuse + specular));
+        }
     }
 
     rgb = rgb * lighting;
