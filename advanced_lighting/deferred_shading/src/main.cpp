@@ -671,7 +671,7 @@ int main(const int argc, const char** argv) {
             light_radiuses.at(lights_i) = radius;
             lights_i++;
         } };
-        for (std::size_t i { 0 }; i < backpack_models.size(); i++) {
+        for (i = 0; i < backpack_models.size(); i++) {
             glm::mat4& model { backpack_models.at(i) };
             model = glm::mat4 { 1.0f };
             model = glm::translate(model, backpack_pos);
