@@ -27,7 +27,7 @@ void main() {
 
     float ambient_mag = 0.001;
     float diffuse_mag = 1.0;
-    float specular_mag = 0.8;
+    float specular_mag = 1.0;
     float brightness = 20.0;
     float att_c = 1.0;
     float att_linear = 0.7;
