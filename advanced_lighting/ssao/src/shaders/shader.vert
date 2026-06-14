@@ -14,16 +14,16 @@ out vec3 vo_normal;
 out vec2 vo_tex_coords;
 
 void main() {
-    vo_frag_pos = vec3(model * vec4(a_pos, 1.0));
+    vo_frag_pos = vec3(view * model * vec4(a_pos, 1.0));
 
     if (invert_normal) {
-        vo_normal = transpose(inverse(mat3(model))) * -a_normal;
+        vo_normal = transpose(inverse(mat3(view * model))) * -a_normal;
     } else {
-        vo_normal = transpose(inverse(mat3(model))) * a_normal;
+        vo_normal = transpose(inverse(mat3(view * model))) * a_normal;
     }
 
     vo_tex_coords = a_tex_coord;
 
-    gl_Position = projection * view * vec4(vo_frag_pos, 1.0);
+    gl_Position = projection * vec4(vo_frag_pos, 1.0);
 }
 

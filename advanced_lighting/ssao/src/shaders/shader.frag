@@ -1,6 +1,6 @@
 #version 460 core
 
-#define LIGHTS_COUNT 27
+#define LIGHTS_COUNT 1
 
 struct PointLight {
     vec3 pos;
@@ -10,9 +10,11 @@ struct PointLight {
 uniform sampler2D g_position;
 uniform sampler2D g_normal;
 uniform sampler2D g_color_specular;
+uniform sampler2D ssao;
 uniform vec3 view_pos;
 uniform float exposure;
 uniform bool hdr_disabled;
+uniform bool ssao_disabled;
 uniform PointLight point_lights[LIGHTS_COUNT];
 
 in vec2 vo_tex_coords;
@@ -24,21 +26,24 @@ void main() {
     vec3 normal = normalize(texture(g_normal, vo_tex_coords).rgb);
     vec3 rgb = texture(g_color_specular, vo_tex_coords).rgb;
     float specular_material = texture(g_color_specular, vo_tex_coords).a;
+    float ambient_occlusion = ssao_disabled
+        ? 1.0
+        : texture(ssao, vo_tex_coords).r;
 
-    float ambient_mag = 0.001;
-    float diffuse_mag = 1.0;
-    float specular_mag = 1.0;
-    float brightness = 20.0;
+    float ambient_mag = 0.1;
+    float diffuse_mag = 0.5;
+    float specular_mag = 0.5;
+    float brightness = 5.0;
     float att_c = 1.0;
     float att_linear = 0.7;
     float att_quadratic = 1.8;
 
-    vec3 view_dir = normalize(view_pos - frag_pos);
+    vec3 view_dir = normalize(-frag_pos);
 
     vec3 lighting = vec3(0.0);
 
     // Ambient
-    vec3 ambient = vec3(1.0) * ambient_mag;
+    vec3 ambient = vec3(ambient_mag * rgb * ambient_occlusion);
 
     for (int i = 0; i < LIGHTS_COUNT; i++) {
         // Diffuse

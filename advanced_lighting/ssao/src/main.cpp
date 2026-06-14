@@ -68,6 +68,8 @@ static bool hdr_disabled { false };
 static float exposure { 0.5f };
 static bool render_gbuffer { false };
 static bool render_ssao_buffer { false };
+static bool render_ssao_with_blur { true };
+static bool ssao_disabled { false };
 
 std::filesystem::path textures_path { };
 std::filesystem::path shaders_path { };
@@ -202,6 +204,24 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             break;
         }
         break;
+
+    // Toggle render ssao buffer with blur
+    case GLFW_KEY_B:
+        switch (action) {
+        case GLFW_PRESS:
+            render_ssao_with_blur = !render_ssao_with_blur;
+            break;
+        }
+        break;
+
+    // Toggle ssao disabled
+    case GLFW_KEY_N:
+        switch (action) {
+        case GLFW_PRESS:
+            ssao_disabled = !ssao_disabled;
+            break;
+        }
+        break;
     }
 
     if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9 && action == GLFW_PRESS) {
@@ -214,7 +234,8 @@ unsigned int texture_load(
     const GLenum internal_format,
     const GLenum format,
     const bool flip = true,
-    const int wrap_method = GL_REPEAT) {
+    const int wrap_method = GL_REPEAT
+) {
     if (!std::filesystem::exists(path)) {
         log_error(std::format("The given image file '{}' does not exist.",
             path.c_str())
@@ -379,7 +400,8 @@ int main(const int argc, const char** argv) {
             GL_ARRAY_BUFFER,
             sizeof(float) * quad_vertices.size(),
             quad_vertices.data(),
-            GL_STATIC_DRAW);
+            GL_STATIC_DRAW
+        );
 
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(
@@ -388,7 +410,8 @@ int main(const int argc, const char** argv) {
             GL_FLOAT,
             GL_FALSE,
             quad_stride * sizeof(float),
-            (void*) 0);
+            (void*) 0
+        );
 
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(
@@ -397,7 +420,8 @@ int main(const int argc, const char** argv) {
             GL_FLOAT,
             GL_FALSE,
             quad_stride * sizeof(float),
-            (void*) (3 * sizeof(float)));
+            (void*) (3 * sizeof(float))
+        );
 
         glBindVertexArray(0);
     }
@@ -470,7 +494,8 @@ int main(const int argc, const char** argv) {
         GL_ARRAY_BUFFER,
         sizeof(float) * cube_vertices.size(),
         cube_vertices.data(),
-        GL_STATIC_DRAW);
+        GL_STATIC_DRAW
+    );
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(
@@ -479,7 +504,8 @@ int main(const int argc, const char** argv) {
         GL_FLOAT,
         GL_FALSE,
         cube_stride,
-        (void*) 0);
+        (void*) 0
+    );
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(
         1,
@@ -487,7 +513,8 @@ int main(const int argc, const char** argv) {
         GL_FLOAT,
         GL_FALSE,
         cube_stride,
-        (void*) (sizeof(float) * 3));
+        (void*) (sizeof(float) * 3)
+    );
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(
         2,
@@ -495,7 +522,8 @@ int main(const int argc, const char** argv) {
         GL_FLOAT,
         GL_FALSE,
         cube_stride,
-        (void*) (sizeof(float) * 6));
+        (void*) (sizeof(float) * 6)
+    );
 
     glBindVertexArray(0);
 
@@ -525,15 +553,19 @@ int main(const int argc, const char** argv) {
         0,
         GL_RGBA,
         GL_FLOAT,
-        nullptr);
+        nullptr
+    );
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glFramebufferTexture2D(
         GL_FRAMEBUFFER,
         GL_COLOR_ATTACHMENT0,
         GL_TEXTURE_2D,
         g_position,
-        0);
+        0
+    );
 
     // normal color buffer
     glGenTextures(1, &g_normal);
@@ -547,7 +579,8 @@ int main(const int argc, const char** argv) {
         0,
         GL_RGBA,
         GL_FLOAT,
-        nullptr);
+        nullptr
+    );
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(
@@ -555,7 +588,8 @@ int main(const int argc, const char** argv) {
         GL_COLOR_ATTACHMENT1,
         GL_TEXTURE_2D,
         g_normal,
-        0);
+        0
+    );
 
     // color + specular buffer
     glGenTextures(1, &g_color_specular);
@@ -569,7 +603,8 @@ int main(const int argc, const char** argv) {
         0,
         GL_RGBA,
         GL_FLOAT,
-        nullptr);
+        nullptr
+    );
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(
@@ -577,7 +612,8 @@ int main(const int argc, const char** argv) {
         GL_COLOR_ATTACHMENT2,
         GL_TEXTURE_2D,
         g_color_specular,
-        0);
+        0
+    );
 
     unsigned int g_depth_buf { };
     glGenRenderbuffers(1, &g_depth_buf);
@@ -587,7 +623,8 @@ int main(const int argc, const char** argv) {
         GL_FRAMEBUFFER,
         GL_DEPTH_ATTACHMENT,
         GL_RENDERBUFFER,
-        g_depth_buf);
+        g_depth_buf
+    );
 
     check_framebuffer_complete(GL_FRAMEBUFFER);
 
@@ -596,7 +633,8 @@ int main(const int argc, const char** argv) {
         (const unsigned int[]) {
             GL_COLOR_ATTACHMENT0,
             GL_COLOR_ATTACHMENT1,
-            GL_COLOR_ATTACHMENT2 });
+            GL_COLOR_ATTACHMENT2 }
+    );
 
     unsigned int ssao_fbo { };
     glGenFramebuffers(1, &ssao_fbo);
@@ -614,7 +652,8 @@ int main(const int argc, const char** argv) {
         0,
         GL_RED,
         GL_FLOAT,
-        nullptr);
+        nullptr
+    );
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -623,7 +662,38 @@ int main(const int argc, const char** argv) {
         GL_COLOR_ATTACHMENT0,
         GL_TEXTURE_2D,
         ssao_color_buf,
-        0);
+        0
+    );
+
+    check_framebuffer_complete(GL_FRAMEBUFFER);
+
+    unsigned int ssao_blur_fbo { };
+    glGenFramebuffers(1, &ssao_blur_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, ssao_blur_fbo);
+
+    unsigned int ssao_blur_color_buf { };
+    glGenTextures(1, &ssao_blur_color_buf);
+    glBindTexture(GL_TEXTURE_2D, ssao_blur_color_buf);
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RED,
+        window_width,
+        window_height,
+        0,
+        GL_RED,
+        GL_FLOAT,
+        nullptr
+    );
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(
+        GL_FRAMEBUFFER,
+        GL_COLOR_ATTACHMENT0,
+        GL_TEXTURE_2D,
+        ssao_blur_color_buf,
+        0
+    );
 
     check_framebuffer_complete(GL_FRAMEBUFFER);
 
@@ -646,6 +716,11 @@ int main(const int argc, const char** argv) {
     Shader ssao_shader {
         shaders_path / "2d.vert",
         shaders_path / "ssao.frag"
+    };
+
+    Shader ssao_blur_shader {
+        shaders_path / "2d.vert",
+        shaders_path / "ssao_blur.frag"
     };
 
     Shader screen_texture_shader {
@@ -672,11 +747,13 @@ int main(const int argc, const char** argv) {
     const unsigned int container_texture { texture_load(
         textures_path / "container2.png",
         GL_SRGB_ALPHA,
-        GL_RGBA) };
+        GL_RGBA
+    ) };
     const unsigned int container_specular_map { texture_load(
         textures_path / "specular-maps" / "container2_specular.png",
         GL_RGBA,
-        GL_RGBA) };
+        GL_RGBA
+    ) };
 
     // models
     Model backpack { models_path / "backpack" / "backpack.obj" };
@@ -684,6 +761,10 @@ int main(const int argc, const char** argv) {
     backpack_model = glm::translate(backpack_model, glm::vec3 { -4.0f, -0.3f, -3.0f });
     backpack_model = glm::rotate(backpack_model, glm::radians(90.0f), glm::vec3 { 0.0f, 1.0f, 0.0f });
     backpack_model = glm::rotate(backpack_model, glm::radians(-25.0f), glm::vec3 { 1.0f, 0.0f, 0.0f });
+    glm::mat4 backpack_model2 { 1.0f };
+    backpack_model2 = glm::translate(backpack_model2, glm::vec3 { 2.0f, -1.0f, -3.0f });
+    backpack_model2 = glm::rotate(backpack_model2, glm::radians(-90.0f), glm::vec3 { 0.0f, 1.0f, 0.0f });
+    backpack_model2 = glm::rotate(backpack_model2, glm::radians(-90.0f), glm::vec3 { 1.0f, 0.0f, 0.0f });
 
     glm::mat4 room_model { 1.0f };
     room_model = glm::translate(room_model, glm::vec3 { 0.0f, 3.0f, 0.0f });
@@ -704,7 +785,7 @@ int main(const int argc, const char** argv) {
             return a + f * (b - a);
         } };
         std::uniform_real_distribution<float> random_floats { 0.0f, 1.0f };
-        std::default_random_engine generator { };
+        std::default_random_engine generator;
         for (std::size_t i { 0 }; i < ssao_kernel.size(); i++) {
             glm::vec3 sample {
                 random_floats(generator) * 2.0f - 1.0f,
@@ -739,7 +820,8 @@ int main(const int argc, const char** argv) {
             0,
             GL_RGB,
             GL_FLOAT,
-            ssao_noise.data());
+            ssao_noise.data()
+        );
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -766,6 +848,12 @@ int main(const int argc, const char** argv) {
         constexpr float far_plane { 200.0f };
         const glm::mat4 projection {
             glm::perspective(camera.get_fov_rad(), aspect_ratio, near_plane, far_plane)
+        };
+
+        const unsigned int ssao_buf { 
+            render_ssao_with_blur
+                ? ssao_blur_color_buf
+                : ssao_color_buf
         };
 
         // Render scene
@@ -795,12 +883,16 @@ int main(const int argc, const char** argv) {
             shader.set_bool("invert_normal", false);
             backpack.draw(shader);
 
+            shader.set_mat4("model", backpack_model2);
+            backpack.draw(shader);
+
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         // SSAO pass
         glBindFramebuffer(GL_FRAMEBUFFER, ssao_fbo);
             glClear(GL_COLOR_BUFFER_BIT);
             ssao_shader.use();
+            // ssao_shader.set_mat4("view", view);
             ssao_shader.set_mat4("projection", projection);
             ssao_shader.set_vec2("noise_scale", glm::vec2 { window_width / 4.0f, window_height / 4.0f });
             for (std::size_t i { 0 }; i < ssao_kernel.size(); i++) {
@@ -817,6 +909,17 @@ int main(const int argc, const char** argv) {
             glActiveTexture(GL_TEXTURE2);
             glBindTexture(GL_TEXTURE_2D, ssao_noise_texture);
             glActiveTexture(GL_TEXTURE0);
+            render_quad();
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // SSAO blur
+        glBindFramebuffer(GL_FRAMEBUFFER, ssao_blur_fbo);
+            glClear(GL_COLOR_BUFFER_BIT);
+            ssao_blur_shader.use();
+            ssao_blur_shader.set_mat4("model", glm::mat4 { 1.0f });
+            ssao_blur_shader.set_int("ssao_input", 0);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, ssao_color_buf);
             render_quad();
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -871,24 +974,28 @@ int main(const int argc, const char** argv) {
             screen_texture_shader.set_mat4("model", glm::mat4 { 1.0f });
             screen_texture_shader.set_int("color_buf", 0);
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, ssao_color_buf);
+            glBindTexture(GL_TEXTURE_2D, ssao_buf);
             render_quad();
         } else {
             // Lighting pass
             lighting_pass_shader.use();
             lighting_pass_shader.set_mat4("model", glm::mat4 { 1.0f });
-            lighting_pass_shader.set_vec3("view_pos", camera.get_pos());
+            // lighting_pass_shader.set_vec3("view_pos", camera.get_pos());
             lighting_pass_shader.set_bool("hdr_disabled", hdr_disabled);
+            lighting_pass_shader.set_bool("ssao_disabled", ssao_disabled);
             lighting_pass_shader.set_float("exposure", exposure);
             lighting_pass_shader.set_int("g_position", 0);
             lighting_pass_shader.set_int("g_normal", 1);
             lighting_pass_shader.set_int("g_color_specular", 2);
+            lighting_pass_shader.set_int("ssao", 3);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, g_position);
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(GL_TEXTURE_2D, g_normal);
             glActiveTexture(GL_TEXTURE2);
             glBindTexture(GL_TEXTURE_2D, g_color_specular);
+            glActiveTexture(GL_TEXTURE3);
+            glBindTexture(GL_TEXTURE_2D, ssao_buf);
 
             lighting_pass_shader.set_vec3("point_lights[0].pos", light_pos);
             lighting_pass_shader.set_vec3("point_lights[0].color", light_color);
@@ -921,14 +1028,16 @@ int main(const int argc, const char** argv) {
 
         glDisable(GL_DEPTH_TEST);
             draw_letters_in_corner_red_green(
-                (const Letters[]) { Letters::G, Letters::H, Letters::P },
-                3,
+                (const Letters[]) { Letters::G, Letters::H, Letters::P, Letters::B, Letters::N },
+                5,
                 (const glm::vec3[]) { glm::vec3 { 0.0f } },
                 1,
                 (const bool[]) {
                     render_gbuffer,
                     !hdr_disabled && !render_gbuffer && !render_ssao_buffer,
                     render_ssao_buffer,
+                    render_ssao_with_blur,
+                    !ssao_disabled
                 },
                 Corners::TOPLEFT,
                 glm::vec3 { 0.5f },
