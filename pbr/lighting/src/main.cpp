@@ -33,7 +33,7 @@ static constexpr struct {
     float speed;
     float mouse_sensitivity;
 } camera_defaults {
-    .pos = glm::vec3 { 0.0f, 3.0f, 0.0f },
+    .pos = glm::vec3 { 0.0f, 0.0f, 5.0f },
     .fov_deg = 70.0f,
     .speed = 2.5f,
     .mouse_sensitivity = 0.05f
@@ -285,8 +285,13 @@ int main(const int argc, const char** argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(window_width, window_height,
-        "LearnOpenGL", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(
+        window_width,
+        window_height,
+        "LearnOpenGL",
+        nullptr,
+        nullptr
+    );
     if (window == nullptr) {
         std::fprintf(stderr, "Failed to create GLFWwindow.\n");
         quit(1);
@@ -355,7 +360,7 @@ int main(const int argc, const char** argv) {
     for (int row = 0; row < nrRows; ++row) {
         for (int col = 0; col < nrColumns; ++col) {
             glm::mat4 model = glm::mat4(1.0f);
-            model = glm::translate(model, glm::vec3((float) (col - (nrColumns / 2)) * spacing, (float) (row - (nrRows / 2)) * spacing, 0.0f));
+            model = glm::translate(model, glm::vec3((float) (col - (nrColumns / 2.0f)) * spacing, (float) (row - (nrRows / 2.0f)) * spacing, 0.0f));
             models.at(col + row * nrColumns) = model;
         }
     }
