@@ -8,9 +8,11 @@ uniform sampler2D u_normal_map;
 uniform sampler2D u_metallic_map;
 uniform sampler2D u_roughness_map;
 uniform sampler2D u_ao_map;
+uniform samplerCube u_irradiance_map;
 uniform vec3[LIGHTS_COUNT] u_light_positions;
 uniform vec3[LIGHTS_COUNT] u_light_colors;
-uniform bool u_hdr_enabled;
+uniform uint u_lights_count;
+uniform bool u_use_irradiance_map;
 
 in vec2 tex_coords;
 in vec3 world_pos;
@@ -23,6 +25,10 @@ const float PI = 3.14159265359;
 // Fresnel
 vec3 fresnel_schlick(float cos_theta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
+}
+
+vec3 fresnel_schlick_roughness(float cos_theta, vec3 F0, float roughness) {
+    return F0 + (max(vec3(1.0 - F0), F0) - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
 }
 
 // Distribution
@@ -86,8 +92,11 @@ void main() {
     vec3 N = normalize(normal);
     vec3 V = normalize(u_camera_pos - world_pos);
 
+    vec3 F0 = vec3(0.04);
+    F0 = mix(F0, albedo, metallic);
+
     vec3 Lo = vec3(0.0);
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < u_lights_count; i++) {
         vec3 L = normalize(u_light_positions[i] - world_pos);
         vec3 H = normalize(V + L);
 
@@ -97,8 +106,6 @@ void main() {
         float attenuation = 1.0 / (distance * distance);
         vec3 radiance = u_light_colors[i] * attenuation;
 
-        vec3 F0 = vec3(0.04);
-        F0 = mix(F0, albedo, metallic);
         vec3 F = fresnel_schlick(max(dot(H, V), 0.0), F0);
         
         float NDF = distribution_ggx(N, H, roughness);
@@ -116,11 +123,17 @@ void main() {
     }
 
     vec3 ambient = vec3(0.03) * albedo * ao;
+    if (u_use_irradiance_map) {
+        vec3 kS = fresnel_schlick_roughness(max(dot(N, V), 0.0), F0, roughness);
+        vec3 kD = 1.0 - kS;
+        vec3 irradiance = texture(u_irradiance_map, N).rgb;
+        vec3 diffuse = irradiance * albedo;
+        ambient = kD * diffuse * ao;
+    }
+
     vec3 color = ambient + Lo;
 
-    if (u_hdr_enabled) {
-        color = color / (color + vec3(1.0));
-    }
+    color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
 
     frag_color = vec4(color, 1.0);

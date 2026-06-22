@@ -140,6 +140,15 @@ void Shader::set_int(const std::string_view& name, const int value) const {
     glUniform1i(uniform, value);
 }
 
+void Shader::set_uint(const std::string_view& name, const unsigned int value) const {
+    const int uniform { glGetUniformLocation(this->_id, name.data()) };
+    if (uniform == -1) {
+        log_error(std::format("Could not find uniform: {}", name).c_str());
+        quit(1);
+    }
+    glUniform1ui(uniform, value);
+}
+
 void Shader::set_float(const std::string_view& name, const float value) const {
     const int uniform { glGetUniformLocation(this->_id, name.data()) };
     if (uniform == -1) {

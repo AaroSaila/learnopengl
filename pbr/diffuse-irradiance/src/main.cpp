@@ -1,16 +1,16 @@
 #include <assert.h>
+#include <chrono>
 #include <filesystem>
 #include <print>
 #include <string>
-#include <chrono>
 #include <thread>
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <glm/common.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/geometric.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
@@ -25,8 +25,7 @@
 #include "error_handling.hpp"
 #include "quit.hpp"
 #include "trace.hpp"
-
-using namespace std::chrono_literals;
+#include "letters.hpp"
 
 static int window_width { 800 };
 static int window_height { 600 };
@@ -52,6 +51,7 @@ static float last_frame_s { 0.0f };
 static constexpr float fps_cap_s { 1.0f / (144.0f + 2.0f) };
 static bool cursor_mouse_enabled { true };
 static bool first_mouse_input { true };
+static bool use_irradiance_map { true };
 
 static unsigned int sphereVAO { 0 };
 static unsigned int sphereIndexCount { };
@@ -61,6 +61,9 @@ static unsigned int cubeVBO { 0 };
 std::filesystem::path textures_path { };
 std::filesystem::path shaders_path { };
 std::filesystem::path models_path { };
+
+void renderSphere();
+void renderCube();
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     (void) window;
@@ -148,6 +151,14 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             int current_mode { };
             glGetIntegerv(GL_POLYGON_MODE, &current_mode);
             glPolygonMode(GL_FRONT_AND_BACK, current_mode == GL_FILL ? GL_LINE : GL_FILL);
+            break;
+        }
+        break;
+
+    case GLFW_KEY_B:
+        switch (action) {
+        case GLFW_PRESS:
+            use_irradiance_map = !use_irradiance_map;
             break;
         }
         break;
@@ -251,6 +262,77 @@ unsigned int cubemap_load(const std::vector<std::filesystem::path>& faces) {
     return cubemap;
 }
 
+unsigned int cubemap_create(const std::size_t w, const std::size_t h) {
+    unsigned int cubemap { };
+    glGenTextures(1, &cubemap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap);
+    for (std::size_t i { 0 }; i < 6; i++) {
+        glTexImage2D(
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+            0,
+            GL_RGB16F,
+            w,
+            h,
+            0,
+            GL_RGB,
+            GL_FLOAT,
+            nullptr
+        );
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    return cubemap;
+};
+
+void render_to_cubemap(
+    const unsigned int cubemap,
+    const unsigned int fbo,
+    const GLenum texture_type,
+    const unsigned int texture,
+    const std::size_t w,
+    const std::size_t h,
+    Shader& shader
+) {
+    static const glm::mat4 projection { glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f) };
+    // clang-format off
+    static const std::array<glm::mat4, 6> views {
+        glm::lookAt(glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { 1.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, -1.0f, 0.0f }),
+        glm::lookAt(glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { -1.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, -1.0f, 0.0f }),
+        glm::lookAt(glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, 1.0f, 0.0f }, glm::vec3 { 0.0f, 0.0f, 1.0f }),
+        glm::lookAt(glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, -1.0f, 0.0f }, glm::vec3 { 0.0f, 0.0f, -1.0f }),
+        glm::lookAt(glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, 0.0f, 1.0f }, glm::vec3 { 0.0f, -1.0f, 0.0f }),
+        glm::lookAt(glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, 0.0f, -1.0f }, glm::vec3 { 0.0f, -1.0f, 0.0f }),
+    };
+    // clang-format on
+
+    shader.use();
+    shader.set_mat4("u_projection", projection);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(texture_type, texture);
+
+    glViewport(0, 0, w, h);
+    // clang-format off
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        for (std::size_t i { 0 }; i < 6; i++) {
+            shader.set_mat4("u_view", views.at(i));
+            glFramebufferTexture2D(
+                GL_FRAMEBUFFER,
+                GL_COLOR_ATTACHMENT0,
+                GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+                cubemap,
+                0
+            );
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            renderCube();
+        }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // clang-format on
+}
+
 unsigned int radiance_map_load(const std::filesystem::path& path, const bool flip = true) {
     stbi_set_flip_vertically_on_load(flip);
     int w { };
@@ -275,9 +357,6 @@ unsigned int radiance_map_load(const std::filesystem::path& path, const bool fli
 
     return tex;
 }
-
-void renderSphere();
-void renderCube();
 
 int main(const int argc, const char** argv) {
     (void) argc;
@@ -344,6 +423,11 @@ int main(const int argc, const char** argv) {
         shaders_path / "radiance_map.frag",
     };
 
+    Shader irradiance_map_shader {
+        shaders_path / "radiance_map.vert",
+        shaders_path / "irradiance_map.frag",
+    };
+
     Shader skybox_shader {
         shaders_path / "skybox.vert",
         shaders_path / "skybox.frag"
@@ -406,14 +490,16 @@ int main(const int argc, const char** argv) {
     constexpr glm::vec3 lightPosition { 0.0f, 0.0f, 10.0f };
     constexpr glm::vec3 lightColor { 150.0f, 150.0f, 150.0f };
 
-    // Hdr cube map setup
-    unsigned int hdr_cube_capture_fbo { };
-    unsigned int hdr_cube_map { };
-    {
-        constexpr unsigned int hdr_cube_map_dim { 512 };
+    // Hdr and irradiance cube map setup
+    constexpr unsigned int hdr_cube_map_dim { 512 };
+    const unsigned int hdr_cubemap { cubemap_create(hdr_cube_map_dim, hdr_cube_map_dim) };
 
-        glGenFramebuffers(1, &hdr_cube_capture_fbo);
-        glBindFramebuffer(GL_FRAMEBUFFER, hdr_cube_capture_fbo);
+    constexpr std::size_t irradiance_map_dim { 32 };
+    unsigned int irradiance_cubemap { cubemap_create(irradiance_map_dim, irradiance_map_dim) };
+    {
+        unsigned int capture_fbo { };
+        glGenFramebuffers(1, &capture_fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, capture_fbo);
 
         unsigned int depth_buf { };
         glGenRenderbuffers(1, &depth_buf);
@@ -431,62 +517,31 @@ int main(const int argc, const char** argv) {
             depth_buf
         );
 
-        glGenTextures(1, &hdr_cube_map);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, hdr_cube_map);
-        for (std::size_t i { 0 }; i < 6; i++) {
-            glTexImage2D(
-                GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
-                0,
-                GL_RGB16F,
-                hdr_cube_map_dim,
-                hdr_cube_map_dim,
-                0,
-                GL_RGB,
-                GL_FLOAT,
-                nullptr
-            );
-        }
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        render_to_cubemap(
+            hdr_cubemap,
+            capture_fbo,
+            GL_TEXTURE_2D,
+            equirectangular_radiance_map,
+            hdr_cube_map_dim,
+            hdr_cube_map_dim,
+            radiance_map_shader
+        );
 
-        const glm::mat4 projection { glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f) };
-        // clang-format off
-        const std::array<glm::mat4, 6> views {
-            glm::lookAt(glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { 1.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, -1.0f, 0.0f }),
-            glm::lookAt(glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { -1.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, -1.0f, 0.0f }),
-            glm::lookAt(glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, 1.0f, 0.0f }, glm::vec3 { 0.0f, 0.0f, 1.0f }),
-            glm::lookAt(glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, -1.0f, 0.0f }, glm::vec3 { 0.0f, 0.0f, -1.0f }),
-            glm::lookAt(glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, 0.0f, 1.0f }, glm::vec3 { 0.0f, -1.0f, 0.0f }),
-            glm::lookAt(glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, 0.0f, -1.0f }, glm::vec3 { 0.0f, -1.0f, 0.0f }),
-        };
-        // clang-format on
-
-        radiance_map_shader.use();
-        radiance_map_shader.set_mat4("u_projection", projection);
-        radiance_map_shader.set_int("u_equirectangular_map", 0);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, equirectangular_radiance_map);
-
-        glViewport(0, 0, hdr_cube_map_dim, hdr_cube_map_dim);
-        // clang-format off
-        glBindFramebuffer(GL_FRAMEBUFFER, hdr_cube_capture_fbo);
-            for (std::size_t i { 0 }; i < 6; i++) {
-                radiance_map_shader.set_mat4("u_view", views.at(i));
-                glFramebufferTexture2D(
-                    GL_FRAMEBUFFER,
-                    GL_COLOR_ATTACHMENT0,
-                    GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
-                    hdr_cube_map,
-                    0
-                );
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-                renderCube();
-            }
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        // clang-format on
+        glRenderbufferStorage(
+            GL_RENDERBUFFER,
+            GL_DEPTH_COMPONENT24,
+            irradiance_map_dim,
+            irradiance_map_dim
+        );
+        render_to_cubemap(
+            irradiance_cubemap,
+            capture_fbo,
+            GL_TEXTURE_CUBE_MAP,
+            hdr_cubemap,
+            irradiance_map_dim,
+            irradiance_map_dim,
+            irradiance_map_shader
+        );
     }
 
     glViewport(0, 0, window_width, window_height);
@@ -519,11 +574,13 @@ int main(const int argc, const char** argv) {
         pbr_shader.set_mat4("u_view", view);
         pbr_shader.set_mat4("u_projection", projection);
         pbr_shader.set_vec3("u_camera_pos", camera.get_pos());
+        pbr_shader.set_bool("u_use_irradiance_map", use_irradiance_map);
         pbr_shader.set_int("u_albedo_map", 0);
         pbr_shader.set_int("u_normal_map", 1);
         pbr_shader.set_int("u_metallic_map", 2);
         pbr_shader.set_int("u_roughness_map", 3);
         pbr_shader.set_int("u_ao_map", 4);
+        pbr_shader.set_int("u_irradiance_map", 5);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, albedo_map);
         glActiveTexture(GL_TEXTURE1);
@@ -534,6 +591,8 @@ int main(const int argc, const char** argv) {
         glBindTexture(GL_TEXTURE_2D, roughness_map);
         glActiveTexture(GL_TEXTURE4);
         glBindTexture(GL_TEXTURE_2D, ao_map);
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, irradiance_cubemap);
 
         for (const auto& model : models) {
             pbr_shader.set_mat4("u_model", model);
@@ -549,16 +608,25 @@ int main(const int argc, const char** argv) {
 
         pbr_shader.set_vec3("u_light_positions[0]", light_pos);
         pbr_shader.set_vec3("u_light_colors[0]", lightColor);
+        pbr_shader.set_uint("u_lights_count", 1);
         pbr_shader.set_mat4("u_model", light_model);
         renderSphere();
 
-        radiance_map_shader.use();
-        radiance_map_shader.set_mat4("u_projection", projection);
-        radiance_map_shader.set_mat4("u_view", view);
-        radiance_map_shader.set_int("u_equirectangular_map", 0);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, equirectangular_radiance_map);
-        renderCube();
+        // radiance_map_shader.use();
+        // radiance_map_shader.set_mat4("u_projection", projection);
+        // radiance_map_shader.set_mat4("u_view", view);
+        // radiance_map_shader.set_int("u_equirectangular_map", 0);
+        // glActiveTexture(GL_TEXTURE0);
+        // glBindTexture(GL_TEXTURE_2D, equirectangular_radiance_map);
+        // renderCube();
+
+        // irradiance_map_shader.use();
+        // irradiance_map_shader.set_mat4("u_projection", projection);
+        // irradiance_map_shader.set_mat4("u_view", view);
+        // irradiance_map_shader.set_int("u_env_map", 0);
+        // glActiveTexture(GL_TEXTURE0);
+        // glBindTexture(GL_TEXTURE_CUBE_MAP, irradiance_cubemap);
+        // renderCube();
 
         // Render skybox
         // clang-format off
@@ -568,22 +636,23 @@ int main(const int argc, const char** argv) {
             skybox_shader.set_mat4("u_view", view);
             skybox_shader.set_int("u_env_map", 0);
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_CUBE_MAP, hdr_cube_map);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, hdr_cubemap);
+            // glBindTexture(GL_TEXTURE_CUBE_MAP, irradiance_cubemap);
             renderCube();
         glDepthFunc(GL_LESS);
 
-        // glDisable(GL_DEPTH_TEST);
-        //     draw_letters_in_corner_red_green(
-        //         (const Letters[]) { Letters::G },
-        //         1,
-        //         (const glm::vec3[]) { glm::vec3 { 0.0f } },
-        //         1,
-        //         (const bool[]) { false },
-        //         Corners::TOPLEFT,
-        //         glm::vec3 { 0.5f },
-        //         letter_shader
-        //     );
-        // glEnable(GL_DEPTH_TEST);
+        glDisable(GL_DEPTH_TEST);
+            draw_letters_in_corner_red_green(
+                (const Letters[]) { Letters::B },
+                1,
+                (const glm::vec3[]) { glm::vec3 { 0.0f } },
+                1,
+                (const bool[]) { use_irradiance_map },
+                Corners::TOPLEFT,
+                glm::vec3 { 0.5f },
+                letter_shader
+            );
+        glEnable(GL_DEPTH_TEST);
         // clang-format on
 
         glfwSwapBuffers(window);
@@ -592,8 +661,7 @@ int main(const int argc, const char** argv) {
         const float frame_end_time_s { static_cast<float>(glfwGetTime()) };
         const float frame_start_end_d_s { frame_end_time_s - frame_start_time_s };
         if (frame_start_end_d_s < fps_cap_s) {
-            const std::chrono::duration<float> dur { fps_cap_s - frame_start_end_d_s};
-            // std::println("Sleeping for {}", dur.count());
+            const std::chrono::duration<float> dur { fps_cap_s - frame_start_end_d_s };
             std::this_thread::sleep_for(dur);
         }
     }
