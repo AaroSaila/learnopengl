@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <assert.h>
 #include <chrono>
 #include <filesystem>
@@ -23,19 +24,19 @@
 #include "Camera.hpp"
 #include "Shader.hpp"
 #include "error_handling.hpp"
+#include "letters.hpp"
 #include "quit.hpp"
 #include "trace.hpp"
-#include "letters.hpp"
 
 static int window_width { 800 };
 static int window_height { 600 };
 
 static Camera camera {
     glm::vec3 { 0.0f, 0.0f, 5.0f }, // pos
-    70.0f,                          // fov deg
-    70.0f,                          // fov max
-    2.5f,                           // move speed
-    0.05f                           // mouse sensitivity
+    70.0f, // fov deg
+    70.0f, // fov max
+    2.5f, // move speed
+    0.05f // mouse sensitivity
 };
 
 static struct {
@@ -170,8 +171,7 @@ unsigned int texture_load(
     const GLenum internal_format,
     const GLenum format,
     const bool flip = false,
-    const int wrap_method = GL_REPEAT
-) {
+    const int wrap_method = GL_REPEAT) {
     if (!std::filesystem::exists(path)) {
         log_error(std::format("The given image file '{}' does not exist.",
             path.c_str())
@@ -276,8 +276,7 @@ unsigned int cubemap_create(const std::size_t w, const std::size_t h) {
             0,
             GL_RGB,
             GL_FLOAT,
-            nullptr
-        );
+            nullptr);
     }
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -295,8 +294,7 @@ void render_to_cubemap(
     const unsigned int texture,
     const std::size_t w,
     const std::size_t h,
-    Shader& shader
-) {
+    Shader& shader) {
     static const glm::mat4 projection { glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f) };
     // clang-format off
     static const std::array<glm::mat4, 6> views {
@@ -390,8 +388,7 @@ int main(const int argc, const char** argv) {
         window_height,
         "LearnOpenGL",
         nullptr,
-        nullptr
-    );
+        nullptr);
     if (window == nullptr) {
         std::fprintf(stderr, "Failed to create GLFWwindow.\n");
         quit(1);
@@ -439,36 +436,30 @@ int main(const int argc, const char** argv) {
     };
 
     // textures
-    const unsigned int albedo_map { texture_load(
-        textures_path / "rustediron2_basecolor.png",
-        GL_RGBA,
-        GL_RGBA
-    ) };
-    const unsigned int metallic_map { texture_load(
-        textures_path / "metallic-maps" / "rustediron2_metallic.png",
-        GL_RED,
-        GL_RED
-    ) };
-    const unsigned int normal_map { texture_load(
-        textures_path / "normal-maps" / "rustediron2_normal.png",
-        GL_RGB,
-        GL_RGB
-    ) };
-    const unsigned int roughness_map { texture_load(
-        textures_path / "roughness-maps" / "rustediron2_roughness.png",
-        GL_RED,
-        GL_RED
-    ) };
-    const unsigned int ao_map { texture_load(
-        textures_path / "ao-maps" / "rustediron2_ao.png",
-        GL_RGB,
-        GL_RGB
-    ) };
+    // const unsigned int albedo_map { texture_load(
+    //     textures_path / "rustediron2_basecolor.png",
+    //     GL_RGBA,
+    //     GL_RGBA) };
+    // const unsigned int metallic_map { texture_load(
+    //     textures_path / "metallic-maps" / "rustediron2_metallic.png",
+    //     GL_RED,
+    //     GL_RED) };
+    // const unsigned int normal_map { texture_load(
+    //     textures_path / "normal-maps" / "rustediron2_normal.png",
+    //     GL_RGB,
+    //     GL_RGB) };
+    // const unsigned int roughness_map { texture_load(
+    //     textures_path / "roughness-maps" / "rustediron2_roughness.png",
+    //     GL_RED,
+    //     GL_RED) };
+    // const unsigned int ao_map { texture_load(
+    //     textures_path / "ao-maps" / "rustediron2_ao.png",
+    //     GL_RGB,
+    //     GL_RGB) };
 
     const unsigned int equirectangular_radiance_map {
         radiance_map_load(
-            textures_path / "hdr" / "newport_loft.hdr"
-        )
+            textures_path / "hdr" / "newport_loft.hdr")
     };
 
     // models
@@ -476,19 +467,31 @@ int main(const int argc, const char** argv) {
     constexpr int nrRows = 7;
     constexpr int nrColumns = 7;
     float spacing = 2.5;
-    std::array<glm::mat4, nrRows * nrColumns> models { };
-    for (int row = 0; row < nrRows; ++row) {
-        for (int col = 0; col < nrColumns; ++col) {
-            glm::mat4 model = glm::mat4(1.0f);
-            model = glm::translate(model, glm::vec3((float) (col - (nrColumns / 2.0f)) * spacing, (float) (row - (nrRows / 2.0f)) * spacing, 0.0f));
-            models.at(col + row * nrColumns) = model;
-        }
-    }
+    // std::array<glm::mat4, nrRows * nrColumns> models { };
+    // for (int row = 0; row < nrRows; ++row) {
+    //     for (int col = 0; col < nrColumns; ++col) {
+    //         glm::mat4 model = glm::mat4(1.0f);
+    //         model = glm::translate(model, glm::vec3((float) (col - (nrColumns / 2.0f)) * spacing, (float) (row - (nrRows / 2.0f)) * spacing, 0.0f));
+    //         models.at(col + row * nrColumns) = model;
+    //     }
+    // }
 
     // lights
     // from demo code
-    constexpr glm::vec3 lightPosition { 0.0f, 0.0f, 10.0f };
-    constexpr glm::vec3 lightColor { 150.0f, 150.0f, 150.0f };
+    // constexpr glm::vec3 lightPosition { 0.0f, 0.0f, 10.0f };
+    // constexpr glm::vec3 lightColor { 150.0f, 150.0f, 150.0f };
+    const std::array lightPositions {
+        glm::vec3(-10.0f, 10.0f, 10.0f),
+        glm::vec3(10.0f, 10.0f, 10.0f),
+        glm::vec3(-10.0f, -10.0f, 10.0f),
+        glm::vec3(10.0f, -10.0f, 10.0f),
+    };
+    const std::array lightColors {
+        glm::vec3(300.0f, 300.0f, 300.0f),
+        glm::vec3(300.0f, 300.0f, 300.0f),
+        glm::vec3(300.0f, 300.0f, 300.0f),
+        glm::vec3(300.0f, 300.0f, 300.0f)
+    };
 
     // Hdr and irradiance cube map setup
     constexpr unsigned int hdr_cube_map_dim { 512 };
@@ -508,14 +511,12 @@ int main(const int argc, const char** argv) {
             GL_RENDERBUFFER,
             GL_DEPTH_COMPONENT24,
             hdr_cube_map_dim,
-            hdr_cube_map_dim
-        );
+            hdr_cube_map_dim);
         glFramebufferRenderbuffer(
             GL_FRAMEBUFFER,
             GL_DEPTH_ATTACHMENT,
             GL_RENDERBUFFER,
-            depth_buf
-        );
+            depth_buf);
 
         render_to_cubemap(
             hdr_cubemap,
@@ -524,15 +525,13 @@ int main(const int argc, const char** argv) {
             equirectangular_radiance_map,
             hdr_cube_map_dim,
             hdr_cube_map_dim,
-            radiance_map_shader
-        );
+            radiance_map_shader);
 
         glRenderbufferStorage(
             GL_RENDERBUFFER,
             GL_DEPTH_COMPONENT24,
             irradiance_map_dim,
-            irradiance_map_dim
-        );
+            irradiance_map_dim);
         render_to_cubemap(
             irradiance_cubemap,
             capture_fbo,
@@ -540,8 +539,7 @@ int main(const int argc, const char** argv) {
             hdr_cubemap,
             irradiance_map_dim,
             irradiance_map_dim,
-            irradiance_map_shader
-        );
+            irradiance_map_shader);
     }
 
     glViewport(0, 0, window_width, window_height);
@@ -575,42 +573,78 @@ int main(const int argc, const char** argv) {
         pbr_shader.set_mat4("u_projection", projection);
         pbr_shader.set_vec3("u_camera_pos", camera.get_pos());
         pbr_shader.set_bool("u_use_irradiance_map", use_irradiance_map);
-        pbr_shader.set_int("u_albedo_map", 0);
-        pbr_shader.set_int("u_normal_map", 1);
-        pbr_shader.set_int("u_metallic_map", 2);
-        pbr_shader.set_int("u_roughness_map", 3);
-        pbr_shader.set_int("u_ao_map", 4);
-        pbr_shader.set_int("u_irradiance_map", 5);
+
+        pbr_shader.set_vec3("u_albedo", glm::vec3 { 0.5f, 0.0f, 0.0f });
+        pbr_shader.set_float("u_ao", 1.0f);
+        pbr_shader.set_int("u_irradiance_map", 0);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, albedo_map);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, normal_map);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, metallic_map);
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, roughness_map);
-        glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, ao_map);
-        glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_CUBE_MAP, irradiance_cubemap);
 
-        for (const auto& model : models) {
+        glm::mat4 model = glm::mat4(1.0f);
+        for (int row = 0; row < nrRows; ++row) {
+            pbr_shader.set_float("u_metallic", (float) row / (float) nrRows);
+            for (int col = 0; col < nrColumns; ++col) {
+                // we clamp the roughness to 0.025 - 1.0 as perfectly smooth surfaces (roughness of 0.0) tend to look a bit off
+                // on direct lighting.
+                pbr_shader.set_float("u_roughness", glm::clamp((float) col / (float) nrColumns, 0.05f, 1.0f));
+
+                model = glm::mat4(1.0f);
+                model = glm::translate(model, glm::vec3((float) (col - (nrColumns / 2.0f)) * spacing, (float) (row - (nrRows / 2.0f)) * spacing, -2.0f));
+                pbr_shader.set_mat4("u_model", model);
+                renderSphere();
+            }
+        }
+
+        // pbr_shader.set_int("u_albedo_map", 0);
+        // pbr_shader.set_int("u_normal_map", 1);
+        // pbr_shader.set_int("u_metallic_map", 2);
+        // pbr_shader.set_int("u_roughness_map", 3);
+        // pbr_shader.set_int("u_ao_map", 4);
+        // pbr_shader.set_int("u_irradiance_map", 5);
+        // glActiveTexture(GL_TEXTURE0);
+        // glBindTexture(GL_TEXTURE_2D, albedo_map);
+        // glActiveTexture(GL_TEXTURE1);
+        // glBindTexture(GL_TEXTURE_2D, normal_map);
+        // glActiveTexture(GL_TEXTURE2);
+        // glBindTexture(GL_TEXTURE_2D, metallic_map);
+        // glActiveTexture(GL_TEXTURE3);
+        // glBindTexture(GL_TEXTURE_2D, roughness_map);
+        // glActiveTexture(GL_TEXTURE4);
+        // glBindTexture(GL_TEXTURE_2D, ao_map);
+        // glActiveTexture(GL_TEXTURE5);
+        // glBindTexture(GL_TEXTURE_CUBE_MAP, irradiance_cubemap);
+
+        // for (const auto& model : models) {
+        //     pbr_shader.set_mat4("u_model", model);
+        //     renderSphere();
+        // }
+
+        static_assert(lightPositions.size() <= 4);
+        pbr_shader.set_uint("u_lights_count", lightPositions.size());
+        static_assert(lightPositions.size() == lightColors.size());
+        for (std::size_t i { 0 }; i < lightPositions.size(); ++i) {
+            pbr_shader.set_vec3("u_light_positions[" + std::to_string(i) + "]", lightPositions.at(i));
+            pbr_shader.set_vec3("u_light_colors[" + std::to_string(i) + "]", lightColors.at(i));
+
+            glm::mat4 model = glm::mat4(1.0f);
+            model = glm::translate(model, lightPositions.at(i));
+            model = glm::scale(model, glm::vec3(0.5f));
             pbr_shader.set_mat4("u_model", model);
             renderSphere();
         }
 
-        const glm::vec3 light_pos {
-            lightPosition + glm::vec3 { std::sin(frame_start_time_s * 5.0f) * 5.0f, 0.0f, 0.0f }
-        };
-        glm::mat4 light_model { 1.0f };
-        light_model = glm::translate(light_model, light_pos);
-        light_model = glm::scale(light_model, glm::vec3 { 0.5f });
-
-        pbr_shader.set_vec3("u_light_positions[0]", light_pos);
-        pbr_shader.set_vec3("u_light_colors[0]", lightColor);
-        pbr_shader.set_uint("u_lights_count", 1);
-        pbr_shader.set_mat4("u_model", light_model);
-        renderSphere();
+        // const glm::vec3 light_pos {
+        //     lightPosition + glm::vec3 { std::sin(frame_start_time_s * 5.0f) * 5.0f, 0.0f, 0.0f }
+        // };
+        // glm::mat4 light_model { 1.0f };
+        // light_model = glm::translate(light_model, light_pos);
+        // light_model = glm::scale(light_model, glm::vec3 { 0.5f });
+        //
+        // pbr_shader.set_vec3("u_light_positions[0]", light_pos);
+        // pbr_shader.set_vec3("u_light_colors[0]", lightColor);
+        // pbr_shader.set_uint("u_lights_count", 1);
+        // pbr_shader.set_mat4("u_model", light_model);
+        // renderSphere();
 
         // radiance_map_shader.use();
         // radiance_map_shader.set_mat4("u_projection", projection);
@@ -758,46 +792,46 @@ void renderCube() {
         float vertices[] = {
             // back face
             -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
-            1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f,   // top-right
-            1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f,  // bottom-right
-            1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f,   // top-right
+            1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f, // top-right
+            1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, // bottom-right
+            1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f, // top-right
             -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
-            -1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f,  // top-left
+            -1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f, // top-left
             // front face
             -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // bottom-left
-            1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f,  // bottom-right
-            1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,   // top-right
-            1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,   // top-right
-            -1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f,  // top-left
+            1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, // bottom-right
+            1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, // top-right
+            1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, // top-right
+            -1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, // top-left
             -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // bottom-left
             // left face
-            -1.0f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f,   // top-right
-            -1.0f, 1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f,  // top-left
+            -1.0f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // top-right
+            -1.0f, 1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // top-left
             -1.0f, -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, // bottom-left
             -1.0f, -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, // bottom-left
-            -1.0f, -1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f,  // bottom-right
-            -1.0f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f,   // top-right
-                                                                // right face
-            1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,     // top-left
-            1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,   // bottom-right
-            1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,    // top-right
-            1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,   // bottom-right
-            1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,     // top-left
-            1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,    // bottom-left
+            -1.0f, -1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, // bottom-right
+            -1.0f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // top-right
+                                                              // right face
+            1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // top-left
+            1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, // bottom-right
+            1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // top-right
+            1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, // bottom-right
+            1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // top-left
+            1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, // bottom-left
             // bottom face
             -1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f, // top-right
-            1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f,  // top-left
-            1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,   // bottom-left
-            1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,   // bottom-left
-            -1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f,  // bottom-right
+            1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f, // top-left
+            1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f, // bottom-left
+            1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f, // bottom-left
+            -1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f, // bottom-right
             -1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f, // top-right
             // top face
             -1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // top-left
-            1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,   // bottom-right
-            1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,  // top-right
-            1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,   // bottom-right
+            1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, // bottom-right
+            1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, // top-right
+            1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, // bottom-right
             -1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // top-left
-            -1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f   // bottom-left
+            -1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f // bottom-left
         };
         glGenVertexArrays(1, &cubeVAO);
         glGenBuffers(1, &cubeVBO);

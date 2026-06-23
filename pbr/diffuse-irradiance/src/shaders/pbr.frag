@@ -3,11 +3,17 @@
 #define LIGHTS_COUNT 4
 
 uniform vec3 u_camera_pos;
-uniform sampler2D u_albedo_map;
-uniform sampler2D u_normal_map;
-uniform sampler2D u_metallic_map;
-uniform sampler2D u_roughness_map;
-uniform sampler2D u_ao_map;
+// uniform sampler2D u_albedo_map;
+// uniform sampler2D u_normal_map;
+// uniform sampler2D u_metallic_map;
+// uniform sampler2D u_roughness_map;
+// uniform sampler2D u_ao_map;
+// uniform samplerCube u_irradiance_map;
+uniform vec3 u_albedo;
+uniform float u_normal;
+uniform float u_metallic;
+uniform float u_roughness;
+uniform float u_ao;
 uniform samplerCube u_irradiance_map;
 uniform vec3[LIGHTS_COUNT] u_light_positions;
 uniform vec3[LIGHTS_COUNT] u_light_colors;
@@ -65,29 +71,33 @@ float geometry_smith(vec3 N, vec3 V, vec3 L, float roughness) {
 }
 
 // From demo code
-vec3 getNormalFromMap()
-{
-    vec3 tangentNormal = texture(u_normal_map, tex_coords).xyz * 2.0 - 1.0;
-
-    vec3 Q1  = dFdx(world_pos);
-    vec3 Q2  = dFdy(world_pos);
-    vec2 st1 = dFdx(tex_coords);
-    vec2 st2 = dFdy(tex_coords);
-
-    vec3 N   = normalize(normal);
-    vec3 T  = normalize(Q1*st2.t - Q2*st1.t);
-    vec3 B  = -normalize(cross(N, T));
-    mat3 TBN = mat3(T, B, N);
-
-    return normalize(TBN * tangentNormal);
-}
+// vec3 getNormalFromMap()
+// {
+//     vec3 tangentNormal = texture(u_normal_map, tex_coords).xyz * 2.0 - 1.0;
+//
+//     vec3 Q1  = dFdx(world_pos);
+//     vec3 Q2  = dFdy(world_pos);
+//     vec2 st1 = dFdx(tex_coords);
+//     vec2 st2 = dFdy(tex_coords);
+//
+//     vec3 N   = normalize(normal);
+//     vec3 T  = normalize(Q1*st2.t - Q2*st1.t);
+//     vec3 B  = -normalize(cross(N, T));
+//     mat3 TBN = mat3(T, B, N);
+//
+//     return normalize(TBN * tangentNormal);
+// }
 
 void main() {
-    vec3 albedo = pow(texture(u_albedo_map, tex_coords).rgb, vec3(2.2));
-    vec3 normal = getNormalFromMap();
-    float metallic = texture(u_metallic_map, tex_coords).r;
-    float roughness = texture(u_roughness_map, tex_coords).r;
-    float ao = texture(u_ao_map, tex_coords).r;
+    // vec3 albedo = pow(texture(u_albedo_map, tex_coords).rgb, vec3(2.2));
+    // vec3 normal = getNormalFromMap();
+    // float metallic = texture(u_metallic_map, tex_coords).r;
+    // float roughness = texture(u_roughness_map, tex_coords).r;
+    // float ao = texture(u_ao_map, tex_coords).r;
+    vec3 albedo = u_albedo;
+    float metallic = u_metallic;
+    float roughness = u_roughness;
+    float ao = u_ao;
 
     vec3 N = normalize(normal);
     vec3 V = normalize(u_camera_pos - world_pos);
