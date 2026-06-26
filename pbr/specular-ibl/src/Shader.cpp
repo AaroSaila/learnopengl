@@ -1,0 +1,195 @@
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string_view>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
+#include "glad/glad.h"
+
+#include "Shader.hpp"
+#include "error_handling.hpp"
+#include "quit.hpp"
+
+Shader::Shader(
+    const std::filesystem::path& vertex_path,
+    const std::filesystem::path& fragment_path,
+    const std::filesystem::path* geometry_path) {
+    std::string vertex_code;
+    std::string fragment_code;
+    std::ifstream vertex_shader_file;
+    std::ifstream fragment_shader_file;
+    vertex_shader_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+    fragment_shader_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+
+    std::string geometry_code;
+    std::ifstream geometry_shader_file;
+    geometry_shader_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+
+    try {
+        vertex_shader_file.open(vertex_path);
+        std::stringstream vertex_shader_stream;
+        vertex_shader_stream << vertex_shader_file.rdbuf();
+        vertex_shader_file.close();
+        vertex_code = vertex_shader_stream.str();
+
+        fragment_shader_file.open(fragment_path);
+        std::stringstream fragment_shader_stream;
+        fragment_shader_stream << fragment_shader_file.rdbuf();
+        fragment_shader_file.close();
+        fragment_code = fragment_shader_stream.str();
+
+        if (geometry_path != nullptr) {
+            geometry_shader_file.open(*geometry_path);
+            std::stringstream geometry_shader_stream;
+            geometry_shader_stream << geometry_shader_file.rdbuf();
+            geometry_shader_file.close();
+            geometry_code = geometry_shader_stream.str();
+        }
+
+    } catch (std::ifstream::failure e) {
+        const std::string err_str { "Failed to read shaders: " + std::string { e.what() } };
+        log_error(err_str.c_str());
+        quit(1);
+    }
+
+    const char* vertex_code_c_str { vertex_code.c_str() };
+    const char* fragment_code_c_str { fragment_code.c_str() };
+
+    // Vertex shader
+    unsigned int vertex_shader { glCreateShader(GL_VERTEX_SHADER) };
+    if (vertex_shader == 0) {
+        log_error("Failed to create vertex shader.");
+        quit(1);
+    }
+
+    glShaderSource(vertex_shader, 1, &vertex_code_c_str, nullptr);
+    glCompileShader(vertex_shader);
+    check_shader_compile_error(vertex_shader, vertex_path.c_str());
+
+    // Fragment shader
+    unsigned int fragment_shader { glCreateShader(GL_FRAGMENT_SHADER) };
+    if (fragment_shader == 0) {
+        log_error("Failed to create fragment shader.");
+        quit(1);
+    }
+
+    glShaderSource(fragment_shader, 1, &fragment_code_c_str, nullptr);
+    glCompileShader(fragment_shader);
+    check_shader_compile_error(fragment_shader, fragment_path.c_str());
+
+    // Geometry shader
+    unsigned int geometry_shader { };
+    if (geometry_path != nullptr) {
+        geometry_shader = glCreateShader(GL_GEOMETRY_SHADER);
+        if (geometry_shader == 0) {
+            log_error("Failed to create geometry shader.");
+            quit(1);
+        }
+
+        const char* geometry_code_c_str { geometry_code.c_str() };
+
+        glShaderSource(geometry_shader, 1, &geometry_code_c_str, nullptr);
+        glCompileShader(geometry_shader);
+        check_shader_compile_error(geometry_shader, geometry_path->c_str());
+    }
+
+    // Shader program
+    this->_id = glCreateProgram();
+    if (this->_id == 0) {
+        log_error("Failed to create program.");
+        quit(1);
+    }
+
+    glAttachShader(this->_id, vertex_shader);
+    glAttachShader(this->_id, fragment_shader);
+    if (geometry_path != nullptr) {
+        glAttachShader(this->_id, geometry_shader);
+    }
+
+    glLinkProgram(this->_id);
+    check_shader_program_link_error(this->_id);
+
+    // Delete linked shaders
+    glDeleteShader(vertex_shader);
+    glDeleteShader(fragment_shader);
+    if (geometry_path != nullptr) {
+        glDeleteShader(geometry_shader);
+    }
+}
+
+unsigned int Shader::id() const {
+    return this->_id;
+}
+
+void Shader::use() const {
+    glUseProgram(this->_id);
+}
+
+void Shader::set_bool(const std::string_view& name, const bool value) const {
+    glUniform1i(glGetUniformLocation(this->_id, name.data()), static_cast<int>(value));
+}
+
+void Shader::set_int(const std::string_view& name, const int value) const {
+    const int uniform { glGetUniformLocation(this->_id, name.data()) };
+    if (uniform == -1) {
+        log_error(std::format("Could not find uniform: {}", name).c_str());
+        quit(1);
+    }
+    glUniform1i(uniform, value);
+}
+
+void Shader::set_uint(const std::string_view& name, const unsigned int value) const {
+    const int uniform { glGetUniformLocation(this->_id, name.data()) };
+    if (uniform == -1) {
+        log_error(std::format("Could not find uniform: {}", name).c_str());
+        quit(1);
+    }
+    glUniform1ui(uniform, value);
+}
+
+void Shader::set_float(const std::string_view& name, const float value) const {
+    const int uniform { glGetUniformLocation(this->_id, name.data()) };
+    if (uniform == -1) {
+        log_error(std::format("Could not find uniform: {}", name).c_str());
+        quit(1);
+    }
+    glUniform1f(uniform, value);
+}
+
+void Shader::set_vec2(const std::string_view& name, const glm::vec2& value) const {
+    const int uniform { glGetUniformLocation(this->_id, name.data()) };
+    if (uniform == -1) {
+        log_error(std::format("Could not find uniform: {}", name).c_str());
+        quit(1);
+    }
+    glUniform2fv(uniform, 1, glm::value_ptr(value));
+}
+
+void Shader::set_vec3(const std::string_view& name, const glm::vec3& value) const {
+    const int uniform { glGetUniformLocation(this->_id, name.data()) };
+    if (uniform == -1) {
+        log_error(std::format("Could not find uniform: {}", name).c_str());
+        quit(1);
+    }
+    glUniform3fv(uniform, 1, glm::value_ptr(value));
+}
+
+void Shader::set_mat3(const std::string_view& name, const glm::mat3& value) const {
+    const int uniform { glGetUniformLocation(this->_id, name.data()) };
+    if (uniform == -1) {
+        log_error(std::format("Could not find uniform: {}", name).c_str());
+        quit(1);
+    }
+    glUniformMatrix3fv(uniform, 1, GL_FALSE, glm::value_ptr(value));
+}
+
+void Shader::set_mat4(const std::string_view& name, const glm::mat4& value) const {
+    const int uniform { glGetUniformLocation(this->_id, name.data()) };
+    if (uniform == -1) {
+        log_error(std::format("Could not find uniform: {}", name).c_str());
+        quit(1);
+    }
+    glUniformMatrix4fv(uniform, 1, GL_FALSE, glm::value_ptr(value));
+}
