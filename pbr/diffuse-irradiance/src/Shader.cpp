@@ -49,8 +49,7 @@ Shader::Shader(
         }
 
     } catch (std::ifstream::failure e) {
-        const std::string err_str { "Failed to read shaders: " + std::string { e.what() } };
-        log_error(err_str.c_str());
+        log_error("Failed to read shaders: {}", e.what());
         quit(1);
     }
 
@@ -134,7 +133,7 @@ void Shader::set_bool(const std::string_view& name, const bool value) const {
 void Shader::set_int(const std::string_view& name, const int value) const {
     const int uniform { glGetUniformLocation(this->_id, name.data()) };
     if (uniform == -1) {
-        log_error(std::format("Could not find uniform: {}", name).c_str());
+        log_error("Could not find uniform: {}", name);
         quit(1);
     }
     glUniform1i(uniform, value);
@@ -143,7 +142,7 @@ void Shader::set_int(const std::string_view& name, const int value) const {
 void Shader::set_uint(const std::string_view& name, const unsigned int value) const {
     const int uniform { glGetUniformLocation(this->_id, name.data()) };
     if (uniform == -1) {
-        log_error(std::format("Could not find uniform: {}", name).c_str());
+        log_error("Could not find uniform: {}", name);
         quit(1);
     }
     glUniform1ui(uniform, value);
@@ -152,7 +151,7 @@ void Shader::set_uint(const std::string_view& name, const unsigned int value) co
 void Shader::set_float(const std::string_view& name, const float value) const {
     const int uniform { glGetUniformLocation(this->_id, name.data()) };
     if (uniform == -1) {
-        log_error(std::format("Could not find uniform: {}", name).c_str());
+        log_error("Could not find uniform: {}", name);
         quit(1);
     }
     glUniform1f(uniform, value);
@@ -161,7 +160,7 @@ void Shader::set_float(const std::string_view& name, const float value) const {
 void Shader::set_vec2(const std::string_view& name, const glm::vec2& value) const {
     const int uniform { glGetUniformLocation(this->_id, name.data()) };
     if (uniform == -1) {
-        log_error(std::format("Could not find uniform: {}", name).c_str());
+        log_error("Could not find uniform: {}", name);
         quit(1);
     }
     glUniform2fv(uniform, 1, glm::value_ptr(value));
@@ -170,7 +169,7 @@ void Shader::set_vec2(const std::string_view& name, const glm::vec2& value) cons
 void Shader::set_vec3(const std::string_view& name, const glm::vec3& value) const {
     const int uniform { glGetUniformLocation(this->_id, name.data()) };
     if (uniform == -1) {
-        log_error(std::format("Could not find uniform: {}", name).c_str());
+        log_error("Could not find uniform: {}", name);
         quit(1);
     }
     glUniform3fv(uniform, 1, glm::value_ptr(value));
@@ -179,7 +178,7 @@ void Shader::set_vec3(const std::string_view& name, const glm::vec3& value) cons
 void Shader::set_mat3(const std::string_view& name, const glm::mat3& value) const {
     const int uniform { glGetUniformLocation(this->_id, name.data()) };
     if (uniform == -1) {
-        log_error(std::format("Could not find uniform: {}", name).c_str());
+        log_error("Could not find uniform: {}", name);
         quit(1);
     }
     glUniformMatrix3fv(uniform, 1, GL_FALSE, glm::value_ptr(value));
@@ -188,7 +187,7 @@ void Shader::set_mat3(const std::string_view& name, const glm::mat3& value) cons
 void Shader::set_mat4(const std::string_view& name, const glm::mat4& value) const {
     const int uniform { glGetUniformLocation(this->_id, name.data()) };
     if (uniform == -1) {
-        log_error(std::format("Could not find uniform: {}", name).c_str());
+        log_error("Could not find uniform: {}", name);
         quit(1);
     }
     glUniformMatrix4fv(uniform, 1, GL_FALSE, glm::value_ptr(value));

@@ -44,7 +44,6 @@ executable(
   'src/quit.cpp',
   'src/error_handling.cpp',
   'src/stb_impl.cpp',
-  'src/trace.cpp',
   '../../common/glad.c',
   dependencies : dependencies,
   native : true,
