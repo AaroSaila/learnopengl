@@ -14,11 +14,12 @@ uniform float u_normal;
 uniform float u_metallic;
 uniform float u_roughness;
 uniform float u_ao;
-uniform samplerCube u_irradiance_map;
 uniform vec3[LIGHTS_COUNT] u_light_positions;
 uniform vec3[LIGHTS_COUNT] u_light_colors;
 uniform uint u_lights_count;
-uniform bool u_use_irradiance_map;
+uniform samplerCube u_irradiance_map;
+uniform samplerCube u_prefilter_map;
+uniform sampler2D u_brdf_lut;
 
 in vec2 tex_coords;
 in vec3 world_pos;
@@ -34,7 +35,7 @@ vec3 fresnel_schlick(float cos_theta, vec3 F0) {
 }
 
 vec3 fresnel_schlick_roughness(float cos_theta, vec3 F0, float roughness) {
-    return F0 + (max(vec3(1.0 - F0), F0) - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
 }
 
 // Distribution
@@ -43,7 +44,7 @@ float distribution_ggx(vec3 N, vec3 H, float roughness) {
     float a2 = a * a;
     float NdotH = max(dot(N, H), 0.0);
     float NdotH2 = NdotH * NdotH;
-    
+
     float num = a2;
     float denom = NdotH2 * (a2 - 1.0) + 1.0;
     denom = PI * denom * denom;
@@ -105,6 +106,7 @@ void main() {
     vec3 F0 = vec3(0.04);
     F0 = mix(F0, albedo, metallic);
 
+    // Direct lights
     vec3 Lo = vec3(0.0);
     for (int i = 0; i < u_lights_count; i++) {
         vec3 L = normalize(u_light_positions[i] - world_pos);
@@ -117,7 +119,7 @@ void main() {
         vec3 radiance = u_light_colors[i] * attenuation;
 
         vec3 F = fresnel_schlick(max(dot(H, V), 0.0), F0);
-        
+
         float NDF = distribution_ggx(N, H, roughness);
         float G = geometry_smith(N, V, L, roughness);
 
@@ -132,14 +134,23 @@ void main() {
         Lo += (kD * albedo / PI + specular) * radiance * NdotL;
     }
 
-    vec3 ambient = vec3(0.03) * albedo * ao;
-    if (u_use_irradiance_map) {
-        vec3 kS = fresnel_schlick_roughness(max(dot(N, V), 0.0), F0, roughness);
-        vec3 kD = 1.0 - kS;
-        vec3 irradiance = texture(u_irradiance_map, N).rgb;
-        vec3 diffuse = irradiance * albedo;
-        ambient = kD * diffuse * ao;
-    }
+    // Ambient
+    vec3 kS = fresnel_schlick_roughness(max(dot(N, V), 0.0), F0, roughness);
+    vec3 kD = 1.0 - kS;
+    vec3 irradiance = texture(u_irradiance_map, N).rgb;
+    vec3 diffuse = irradiance * albedo;
+
+    vec3 R = reflect(-V, N);
+    const float max_reflection_lod = 4.0;
+    vec3 prefiltered_color = textureLod(
+            u_prefilter_map,
+            R,
+            roughness * max_reflection_lod
+        ).rgb;
+    vec2 env_brdf = texture(u_brdf_lut, vec2(max(dot(N, V), 0.0), roughness)).rg;
+    vec3 specular = prefiltered_color * (kS * env_brdf.x + env_brdf.y);
+
+    vec3 ambient = (kD * diffuse + specular) * ao;
 
     vec3 color = ambient + Lo;
 
@@ -148,4 +159,3 @@ void main() {
 
     frag_color = vec4(color, 1.0);
 }
-

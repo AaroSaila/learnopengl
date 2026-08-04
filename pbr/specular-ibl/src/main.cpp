@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <assert.h>
 #include <chrono>
 #include <filesystem>
@@ -26,17 +25,16 @@
 #include "error_handling.hpp"
 #include "letters.hpp"
 #include "quit.hpp"
-#include "trace.hpp"
 
 static int window_width { 800 };
 static int window_height { 600 };
 
 static Camera camera {
     glm::vec3 { 0.0f, 0.0f, 5.0f }, // pos
-    70.0f, // fov deg
-    70.0f, // fov max
-    2.5f, // move speed
-    0.05f // mouse sensitivity
+    70.0f,                          // fov deg
+    70.0f,                          // fov max
+    2.5f,                           // move speed
+    0.05f                           // mouse sensitivity
 };
 
 static struct {
@@ -49,10 +47,9 @@ static struct {
 
 static float delta_time_s { 0.0f };
 static float last_frame_s { 0.0f };
-static constexpr float fps_cap_s { 1.0f / (144.0f + 2.0f) };
+static constexpr float fps_cap_s { 1.0f / (144.0f + 3.0f) };
 static bool cursor_mouse_enabled { true };
 static bool first_mouse_input { true };
-static bool use_irradiance_map { true };
 
 static unsigned int sphereVAO { 0 };
 static unsigned int sphereIndexCount { };
@@ -65,6 +62,7 @@ std::filesystem::path models_path { };
 
 void renderSphere();
 void renderCube();
+void renderQuad();
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     (void) window;
@@ -155,14 +153,6 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             break;
         }
         break;
-
-    case GLFW_KEY_B:
-        switch (action) {
-        case GLFW_PRESS:
-            use_irradiance_map = !use_irradiance_map;
-            break;
-        }
-        break;
     }
 }
 
@@ -174,9 +164,7 @@ unsigned int texture_load(
     const int wrap_method = GL_REPEAT
 ) {
     if (!std::filesystem::exists(path)) {
-        log_error(std::format("The given image file '{}' does not exist.",
-            path.c_str())
-                .c_str());
+        log_error("The given image file '{}' does not exist.", path.c_str());
         quit(1);
     }
 
@@ -228,9 +216,47 @@ unsigned int texture_load(
     return texture;
 }
 
+unsigned int texture_2d_create(
+    const std::size_t w,
+    const std::size_t h,
+    const GLenum internal_format,
+    const GLenum format,
+    const GLenum pixel_data_type,
+    const bool generate_mipmap = false,
+    const int wrap_method = GL_REPEAT,
+    const GLenum min_filter = GL_LINEAR
+) {
+    unsigned int texture { };
+    glGenTextures(1, &texture);
+
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        internal_format,
+        w,
+        h,
+        0,
+        format,
+        pixel_data_type,
+        nullptr
+    );
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap_method);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap_method);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    if (generate_mipmap) {
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+
+    return texture;
+}
+
 unsigned int cubemap_load(const std::vector<std::filesystem::path>& faces) {
     if (faces.size() != 6) {
-        log_error(std::format("faces must contain 6 elements, has {}", faces.size()).c_str());
+        log_error("faces must contain 6 elements, has {}", faces.size());
         quit(1);
     }
 
@@ -249,7 +275,7 @@ unsigned int cubemap_load(const std::vector<std::filesystem::path>& faces) {
             stbi_image_free(data);
             target++;
         } else {
-            log_error(std::format("Failed to load image from '{}'", face.c_str()).c_str());
+            log_error("Failed to load image from '{}'", face.c_str());
             quit(1);
         }
     }
@@ -266,8 +292,8 @@ unsigned int cubemap_load(const std::vector<std::filesystem::path>& faces) {
 unsigned int cubemap_create(
     const std::size_t w,
     const std::size_t h,
-    const GLenum min_filter = GL_LINEAR,
-    const bool gen_mipmap = false
+    const int min_filter = GL_LINEAR,
+    const bool generate_mipmap = false
 ) {
     unsigned int cubemap { };
     glGenTextures(1, &cubemap);
@@ -291,7 +317,7 @@ unsigned int cubemap_create(
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, min_filter);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    if (gen_mipmap) {
+    if (generate_mipmap) {
         glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
     }
 
@@ -305,7 +331,8 @@ void render_to_cubemap(
     const unsigned int texture,
     const std::size_t w,
     const std::size_t h,
-    Shader& shader
+    Shader& shader,
+    const int mip_level = 0
 ) {
     static const glm::mat4 projection { glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f) };
     // clang-format off
@@ -334,7 +361,7 @@ void render_to_cubemap(
                 GL_COLOR_ATTACHMENT0,
                 GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
                 cubemap,
-                0
+                mip_level
             );
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             renderCube();
@@ -350,7 +377,7 @@ unsigned int radiance_map_load(const std::filesystem::path& path, const bool fli
     int nr_components { };
     float* data { stbi_loadf(path.c_str(), &w, &h, &nr_components, 0) };
     if (!data) {
-        log_error(std::format("Failed to load radiance map from {}", path.c_str()).c_str());
+        log_error("Failed to load radiance map from {}", path.c_str());
         quit(1);
     }
 
@@ -370,8 +397,6 @@ unsigned int radiance_map_load(const std::filesystem::path& path, const bool fli
 
 int main(const int argc, const char** argv) {
     (void) argc;
-
-    Trace::current_level = Trace::Level::NONE;
 
     textures_path = std::filesystem::path { argv[0] }.remove_filename() /= std::filesystem::path { TEXTURES_PATH };
     shaders_path = std::filesystem::path { argv[0] }.remove_filename() /= std::filesystem::path { SHADERS_PATH };
@@ -438,6 +463,21 @@ int main(const int argc, const char** argv) {
         shaders_path / "irradiance_map.frag",
     };
 
+    Shader prefilter_map_shader {
+        shaders_path / "radiance_map.vert",
+        shaders_path / "prefilter_map.frag"
+    };
+
+    Shader brdf_shader {
+        shaders_path / "2d.vert",
+        shaders_path / "precompute_brdf.frag"
+    };
+
+    Shader render_texture_2d_shader {
+        shaders_path / "2d.vert",
+        shaders_path / "render_texture_2d.frag"
+    };
+
     Shader skybox_shader {
         shaders_path / "skybox.vert",
         shaders_path / "skybox.frag"
@@ -447,28 +487,6 @@ int main(const int argc, const char** argv) {
         shaders_path / "letter.vert",
         shaders_path / "letter.frag"
     };
-
-    // textures
-    // const unsigned int albedo_map { texture_load(
-    //     textures_path / "rustediron2_basecolor.png",
-    //     GL_RGBA,
-    //     GL_RGBA) };
-    // const unsigned int metallic_map { texture_load(
-    //     textures_path / "metallic-maps" / "rustediron2_metallic.png",
-    //     GL_RED,
-    //     GL_RED) };
-    // const unsigned int normal_map { texture_load(
-    //     textures_path / "normal-maps" / "rustediron2_normal.png",
-    //     GL_RGB,
-    //     GL_RGB) };
-    // const unsigned int roughness_map { texture_load(
-    //     textures_path / "roughness-maps" / "rustediron2_roughness.png",
-    //     GL_RED,
-    //     GL_RED) };
-    // const unsigned int ao_map { texture_load(
-    //     textures_path / "ao-maps" / "rustediron2_ao.png",
-    //     GL_RGB,
-    //     GL_RGB) };
 
     const unsigned int equirectangular_radiance_map {
         radiance_map_load(
@@ -481,19 +499,9 @@ int main(const int argc, const char** argv) {
     constexpr int nrRows = 7;
     constexpr int nrColumns = 7;
     float spacing = 2.5;
-    // std::array<glm::mat4, nrRows * nrColumns> models { };
-    // for (int row = 0; row < nrRows; ++row) {
-    //     for (int col = 0; col < nrColumns; ++col) {
-    //         glm::mat4 model = glm::mat4(1.0f);
-    //         model = glm::translate(model, glm::vec3((float) (col - (nrColumns / 2.0f)) * spacing, (float) (row - (nrRows / 2.0f)) * spacing, 0.0f));
-    //         models.at(col + row * nrColumns) = model;
-    //     }
-    // }
 
     // lights
     // from demo code
-    // constexpr glm::vec3 lightPosition { 0.0f, 0.0f, 10.0f };
-    // constexpr glm::vec3 lightColor { 150.0f, 150.0f, 150.0f };
     const std::array lightPositions {
         glm::vec3(-10.0f, 10.0f, 10.0f),
         glm::vec3(10.0f, 10.0f, 10.0f),
@@ -507,12 +515,24 @@ int main(const int argc, const char** argv) {
         glm::vec3(300.0f, 300.0f, 300.0f)
     };
 
-    // Hdr and irradiance cube map setup
+    // Hdr, irradiance, and specular cube map setup
     constexpr unsigned int hdr_cube_map_dim { 512 };
-    const unsigned int hdr_cubemap { cubemap_create(hdr_cube_map_dim, hdr_cube_map_dim) };
+    const unsigned int hdr_cubemap { cubemap_create(hdr_cube_map_dim, hdr_cube_map_dim, GL_LINEAR_MIPMAP_LINEAR) };
 
     constexpr std::size_t irradiance_map_dim { 32 };
     unsigned int irradiance_cubemap { cubemap_create(irradiance_map_dim, irradiance_map_dim) };
+
+    const unsigned int prefilter_map { cubemap_create(128, 128, GL_LINEAR_MIPMAP_LINEAR, true) };
+    const std::size_t brdf_lut_dim = 512u;
+    const unsigned int brdf_lut { texture_2d_create(
+        brdf_lut_dim,
+        brdf_lut_dim,
+        GL_RG16F,
+        GL_RG,
+        GL_FLOAT,
+        false,
+        GL_CLAMP_TO_EDGE
+    ) };
     {
         unsigned int capture_fbo { };
         glGenFramebuffers(1, &capture_fbo);
@@ -533,7 +553,6 @@ int main(const int argc, const char** argv) {
             GL_RENDERBUFFER,
             depth_buf
         );
-        check_framebuffer_complete(GL_FRAMEBUFFER);
 
         render_to_cubemap(
             hdr_cubemap,
@@ -544,6 +563,7 @@ int main(const int argc, const char** argv) {
             hdr_cube_map_dim,
             radiance_map_shader
         );
+        glad_glGenerateTextureMipmap(hdr_cubemap);
 
         glRenderbufferStorage(
             GL_RENDERBUFFER,
@@ -560,21 +580,58 @@ int main(const int argc, const char** argv) {
             irradiance_map_dim,
             irradiance_map_shader
         );
-    }
 
-    // ambient specular setup
-    constexpr std::size_t specular_prefilter_cubemap_dim { 128 };
-    unsigned int specular_prefilter_cubemap { cubemap_create(
-        specular_prefilter_cubemap_dim,
-        specular_prefilter_cubemap_dim,
-        GL_LINEAR_MIPMAP_LINEAR,
-        true
-    ) };
-    {
-        glGenTextu
+        // specular
+        const int max_mip_levels { 5 };
+        prefilter_map_shader.use();
+        for (int mip = 0; mip < max_mip_levels; mip++) {
+            const std::size_t prefilter_dim { static_cast<std::size_t>(128 * std::pow(0.5, mip)) };
+            const float roughness { (float) mip / (float) (max_mip_levels - 1) };
+            prefilter_map_shader.set_float("roughness", roughness);
+            glRenderbufferStorage(
+                GL_RENDERBUFFER,
+                GL_DEPTH_COMPONENT24,
+                prefilter_dim,
+                prefilter_dim
+            );
+            render_to_cubemap(
+                prefilter_map,
+                capture_fbo,
+                GL_TEXTURE_CUBE_MAP,
+                hdr_cubemap,
+                prefilter_dim,
+                prefilter_dim,
+                prefilter_map_shader,
+                mip
+            );
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, capture_fbo);
+        glRenderbufferStorage(
+            GL_RENDERBUFFER,
+            GL_DEPTH_COMPONENT24,
+            brdf_lut_dim,
+            brdf_lut_dim
+        );
+        glFramebufferTexture2D(
+            GL_FRAMEBUFFER,
+            GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_2D,
+            brdf_lut,
+            0
+        );
+
+        glViewport(0, 0, brdf_lut_dim, brdf_lut_dim);
+        brdf_shader.use();
+        brdf_shader.set_mat4("model", glm::mat4 { 1.0f });
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        renderQuad();
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     glViewport(0, 0, window_width, window_height);
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     glEnable(GL_DEPTH_TEST);
 
     // Render loop
@@ -585,7 +642,8 @@ int main(const int argc, const char** argv) {
 
         process_input(window);
 
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // View
@@ -599,26 +657,39 @@ int main(const int argc, const char** argv) {
             glm::perspective(camera.get_fov_rad(), aspect_ratio, near_plane, far_plane)
         };
 
+        // Render brdf_lut
+        // render_texture_2d_shader.use();
+        // render_texture_2d_shader.set_mat4("model", glm::mat4 { 1.0 });
+        // render_texture_2d_shader.set_int("tex", 0);
+        // glActiveTexture(GL_TEXTURE0);
+        // glBindTexture(GL_TEXTURE_2D, brdf_lut);
+        // renderQuad();
+
         // Render scene
         pbr_shader.use();
         pbr_shader.set_mat4("u_view", view);
         pbr_shader.set_mat4("u_projection", projection);
         pbr_shader.set_vec3("u_camera_pos", camera.get_pos());
-        pbr_shader.set_bool("u_use_irradiance_map", use_irradiance_map);
 
         pbr_shader.set_vec3("u_albedo", glm::vec3 { 0.5f, 0.0f, 0.0f });
         pbr_shader.set_float("u_ao", 1.0f);
         pbr_shader.set_int("u_irradiance_map", 0);
+        pbr_shader.set_int("u_prefilter_map", 1);
+        pbr_shader.set_int("u_brdf_lut", 2);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_CUBE_MAP, irradiance_cubemap);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, prefilter_map);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, brdf_lut);
 
-        glm::mat4 model = glm::mat4(1.0f);
+        glm::mat4 model = glm::mat4 { 1.0f };
         for (int row = 0; row < nrRows; ++row) {
             pbr_shader.set_float("u_metallic", (float) row / (float) nrRows);
             for (int col = 0; col < nrColumns; ++col) {
                 // we clamp the roughness to 0.025 - 1.0 as perfectly smooth surfaces (roughness of 0.0) tend to look a bit off
                 // on direct lighting.
-                pbr_shader.set_float("u_roughness", glm::clamp((float) col / (float) nrColumns, 0.05f, 1.0f));
+                pbr_shader.set_float("u_roughness", glm::clamp((float) col / (float) nrColumns, 0.025f, 1.0f));
 
                 model = glm::mat4(1.0f);
                 model = glm::translate(model, glm::vec3((float) (col - (nrColumns / 2.0f)) * spacing, (float) (row - (nrRows / 2.0f)) * spacing, -2.0f));
@@ -626,30 +697,6 @@ int main(const int argc, const char** argv) {
                 renderSphere();
             }
         }
-
-        // pbr_shader.set_int("u_albedo_map", 0);
-        // pbr_shader.set_int("u_normal_map", 1);
-        // pbr_shader.set_int("u_metallic_map", 2);
-        // pbr_shader.set_int("u_roughness_map", 3);
-        // pbr_shader.set_int("u_ao_map", 4);
-        // pbr_shader.set_int("u_irradiance_map", 5);
-        // glActiveTexture(GL_TEXTURE0);
-        // glBindTexture(GL_TEXTURE_2D, albedo_map);
-        // glActiveTexture(GL_TEXTURE1);
-        // glBindTexture(GL_TEXTURE_2D, normal_map);
-        // glActiveTexture(GL_TEXTURE2);
-        // glBindTexture(GL_TEXTURE_2D, metallic_map);
-        // glActiveTexture(GL_TEXTURE3);
-        // glBindTexture(GL_TEXTURE_2D, roughness_map);
-        // glActiveTexture(GL_TEXTURE4);
-        // glBindTexture(GL_TEXTURE_2D, ao_map);
-        // glActiveTexture(GL_TEXTURE5);
-        // glBindTexture(GL_TEXTURE_CUBE_MAP, irradiance_cubemap);
-
-        // for (const auto& model : models) {
-        //     pbr_shader.set_mat4("u_model", model);
-        //     renderSphere();
-        // }
 
         static_assert(lightPositions.size() <= 4);
         pbr_shader.set_uint("u_lights_count", lightPositions.size());
@@ -665,35 +712,6 @@ int main(const int argc, const char** argv) {
             renderSphere();
         }
 
-        // const glm::vec3 light_pos {
-        //     lightPosition + glm::vec3 { std::sin(frame_start_time_s * 5.0f) * 5.0f, 0.0f, 0.0f }
-        // };
-        // glm::mat4 light_model { 1.0f };
-        // light_model = glm::translate(light_model, light_pos);
-        // light_model = glm::scale(light_model, glm::vec3 { 0.5f });
-        //
-        // pbr_shader.set_vec3("u_light_positions[0]", light_pos);
-        // pbr_shader.set_vec3("u_light_colors[0]", lightColor);
-        // pbr_shader.set_uint("u_lights_count", 1);
-        // pbr_shader.set_mat4("u_model", light_model);
-        // renderSphere();
-
-        // radiance_map_shader.use();
-        // radiance_map_shader.set_mat4("u_projection", projection);
-        // radiance_map_shader.set_mat4("u_view", view);
-        // radiance_map_shader.set_int("u_equirectangular_map", 0);
-        // glActiveTexture(GL_TEXTURE0);
-        // glBindTexture(GL_TEXTURE_2D, equirectangular_radiance_map);
-        // renderCube();
-
-        // irradiance_map_shader.use();
-        // irradiance_map_shader.set_mat4("u_projection", projection);
-        // irradiance_map_shader.set_mat4("u_view", view);
-        // irradiance_map_shader.set_int("u_env_map", 0);
-        // glActiveTexture(GL_TEXTURE0);
-        // glBindTexture(GL_TEXTURE_CUBE_MAP, irradiance_cubemap);
-        // renderCube();
-
         // Render skybox
         // clang-format off
         glDepthFunc(GL_LEQUAL);
@@ -704,21 +722,9 @@ int main(const int argc, const char** argv) {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_CUBE_MAP, hdr_cubemap);
             // glBindTexture(GL_TEXTURE_CUBE_MAP, irradiance_cubemap);
+            // glBindTexture(GL_TEXTURE_CUBE_MAP, prefilter_map);
             renderCube();
         glDepthFunc(GL_LESS);
-
-        glDisable(GL_DEPTH_TEST);
-            draw_letters_in_corner_red_green(
-                (const Letters[]) { Letters::B },
-                1,
-                (const glm::vec3[]) { glm::vec3 { 0.0f } },
-                1,
-                (const bool[]) { use_irradiance_map },
-                Corners::TOPLEFT,
-                glm::vec3 { 0.5f },
-                letter_shader
-            );
-        glEnable(GL_DEPTH_TEST);
         // clang-format on
 
         glfwSwapBuffers(window);
@@ -824,46 +830,46 @@ void renderCube() {
         float vertices[] = {
             // back face
             -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
-            1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f, // top-right
-            1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, // bottom-right
-            1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f, // top-right
+            1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f,   // top-right
+            1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f,  // bottom-right
+            1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f,   // top-right
             -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
-            -1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f, // top-left
+            -1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f,  // top-left
             // front face
             -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // bottom-left
-            1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, // bottom-right
-            1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, // top-right
-            1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, // top-right
-            -1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, // top-left
+            1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f,  // bottom-right
+            1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,   // top-right
+            1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,   // top-right
+            -1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f,  // top-left
             -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // bottom-left
             // left face
-            -1.0f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // top-right
-            -1.0f, 1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // top-left
+            -1.0f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f,   // top-right
+            -1.0f, 1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f,  // top-left
             -1.0f, -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, // bottom-left
             -1.0f, -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, // bottom-left
-            -1.0f, -1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, // bottom-right
-            -1.0f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // top-right
-                                                              // right face
-            1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // top-left
-            1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, // bottom-right
-            1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // top-right
-            1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, // bottom-right
-            1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // top-left
-            1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, // bottom-left
+            -1.0f, -1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f,  // bottom-right
+            -1.0f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f,   // top-right
+                                                                // right face
+            1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,     // top-left
+            1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,   // bottom-right
+            1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,    // top-right
+            1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,   // bottom-right
+            1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,     // top-left
+            1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,    // bottom-left
             // bottom face
             -1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f, // top-right
-            1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f, // top-left
-            1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f, // bottom-left
-            1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f, // bottom-left
-            -1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f, // bottom-right
+            1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f,  // top-left
+            1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,   // bottom-left
+            1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,   // bottom-left
+            -1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f,  // bottom-right
             -1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f, // top-right
             // top face
             -1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // top-left
-            1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, // bottom-right
-            1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, // top-right
-            1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, // bottom-right
+            1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,   // bottom-right
+            1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,  // top-right
+            1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,   // bottom-right
             -1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // top-left
-            -1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f // bottom-left
+            -1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f   // bottom-left
         };
         glGenVertexArrays(1, &cubeVAO);
         glGenBuffers(1, &cubeVBO);
@@ -884,5 +890,49 @@ void renderCube() {
     // render Cube
     glBindVertexArray(cubeVAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+}
+
+// From demo code
+unsigned int quadVAO = 0;
+unsigned int quadVBO;
+void renderQuad() {
+    if (quadVAO == 0) {
+        float quadVertices[] = {
+            // positions        // texture Coords
+            -1.0f,
+            1.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+            -1.0f,
+            -1.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+            1.0f,
+            0.0f,
+            1.0f,
+            1.0f,
+            1.0f,
+            -1.0f,
+            0.0f,
+            1.0f,
+            0.0f,
+        };
+        // setup plane VAO
+        glGenVertexArrays(1, &quadVAO);
+        glGenBuffers(1, &quadVBO);
+        glBindVertexArray(quadVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*) 0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*) (3 * sizeof(float)));
+    }
+    glBindVertexArray(quadVAO);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindVertexArray(0);
 }

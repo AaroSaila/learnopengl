@@ -10,7 +10,6 @@
 #include "Model.hpp"
 #include "error_handling.hpp"
 #include "quit.hpp"
-#include "trace.hpp"
 
 std::vector<Texture> Model::textures_loaded { };
 
@@ -30,33 +29,32 @@ void Model::draw(Shader& shader) const {
 
 void Model::load_model(const std::filesystem::path& path) {
     if (!std::filesystem::exists(path)) {
-        log_error(std::format(
+        log_error(
             "Failed to load model. Given path does not exist. Path: {}",
-            path.c_str())
-                .c_str());
+            path.c_str()
+        );
         quit(1);
     }
-
-    Trace::trace(Trace::Level::DEBUG, std::format("Loading model from {}", path.c_str()).c_str());
 
     Assimp::Importer importer { };
     const aiScene* scene { importer.ReadFile(
         path.c_str(),
         aiProcess_Triangulate
             | aiProcess_FlipUVs
-            | aiProcess_CalcTangentSpace) };
+            | aiProcess_CalcTangentSpace
+    ) };
 
     if (
         scene == nullptr
         || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE
-        || scene->mRootNode == nullptr) {
+        || scene->mRootNode == nullptr
+    ) {
 
-        log_error(std::format("Failed to load model. Assimp error: {}", importer.GetErrorString()).c_str());
+        log_error("Failed to load model. Assimp error: {}", importer.GetErrorString());
         return;
     }
 
     this->directory = std::filesystem::path { path }.remove_filename();
-    Trace::trace(Trace::Level::DEBUG, std::format("Set model directory to: {}", this->directory).c_str());
 
     this->process_node(scene->mRootNode, scene);
 }
@@ -130,19 +128,22 @@ Mesh Model::process_mesh(aiMesh* mesh, const aiScene* scene) {
     const std::vector<Texture> diffuse_maps { this->load_material_textures(
         material,
         aiTextureType_DIFFUSE,
-        "texture_diffuse") };
+        "texture_diffuse"
+    ) };
     textures.insert(textures.end(), diffuse_maps.begin(), diffuse_maps.end());
 
     const std::vector<Texture> specular_maps { this->load_material_textures(
         material,
         aiTextureType_SPECULAR,
-        "texture_specular") };
+        "texture_specular"
+    ) };
     textures.insert(textures.end(), specular_maps.begin(), specular_maps.end());
 
     const std::vector<Texture> normal_maps { this->load_material_textures(
         material,
         aiTextureType_HEIGHT,
-        "texture_normal") };
+        "texture_normal"
+    ) };
     textures.insert(textures.end(), normal_maps.begin(), normal_maps.end());
 
     return Mesh { vertices, indices, textures };
@@ -151,7 +152,8 @@ Mesh Model::process_mesh(aiMesh* mesh, const aiScene* scene) {
 std::vector<Texture> Model::load_material_textures(
     aiMaterial* material,
     aiTextureType type,
-    std::string type_name) {
+    std::string type_name
+) {
 
     std::vector<Texture> textures { };
 
@@ -159,13 +161,13 @@ std::vector<Texture> Model::load_material_textures(
         aiString path { };
         material->GetTexture(type, i, &path);
 
-        Trace::trace(Trace::Level::DEBUG, std::format("Trying to load material texture from: {}", path.C_Str()).c_str());
         const auto existing_texture { std::find_if(
             Model::textures_loaded.begin(),
             Model::textures_loaded.end(),
             [path](Texture& tex) -> bool {
                 return tex.path.compare(path.C_Str()) == 0;
-            }) };
+            }
+        ) };
 
         if (existing_texture == Model::textures_loaded.end()) {
             Texture texture { };
@@ -184,13 +186,9 @@ std::vector<Texture> Model::load_material_textures(
 
 unsigned int Model::texture_from_file(const std::filesystem::path& path) {
     if (!std::filesystem::exists(path)) {
-        log_error(std::format("The given image file '{}' does not exist.",
-            path.c_str())
-                .c_str());
+        log_error("The given image file '{}' does not exist.", path.c_str());
         quit(1);
     }
-
-    Trace::trace(Trace::Level::DEBUG, std::format("Loading texture from: {}", path.c_str()).c_str());
 
     int img_w { };
     int img_h { };
@@ -215,7 +213,7 @@ unsigned int Model::texture_from_file(const std::filesystem::path& path) {
         format = GL_RGBA;
         break;
     default:
-        log_error(std::format("Unhandled amount of channels: {}", img_nr_channels).c_str());
+        log_error("Unhandled amount of channels: {}", img_nr_channels);
     }
 
     unsigned int texture { };
